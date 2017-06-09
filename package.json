@@ -1,0 +1,23 @@
+{
+  "name": "ldfetch",
+  "version": "0.0.1",
+  "description": "An HTTP library initially written for Linked Connections purposes",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "http",
+    "rdf",
+    "linked",
+    "data",
+    "hypermedia"
+  ],
+  "author": "Pieter Colpaert <pieter.colpaert@ugent.be>",
+  "license": "MIT",
+  "dependencies": {
+    "follow-redirects": "^1.2.3",
+    "http-cache-semantics": "^3.7.3",
+    "n3": "^0.10.0"
+  }
+}
