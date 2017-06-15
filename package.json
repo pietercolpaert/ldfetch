@@ -18,6 +18,13 @@
   "dependencies": {
     "follow-redirects": "^1.2.3",
     "http-cache-semantics": "^3.7.3",
-    "n3": "^0.10.0"
+    "jsonld": "^0.4.12",
+    "n3": "^0.10.0",
+    "node-cache": "^4.1.1",
+    "q": "^1.5.0",
+    "wreck": "^12.2.2"
+  },
+  "browser": {
+    "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js"
   }
 }
