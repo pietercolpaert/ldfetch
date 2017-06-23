@@ -16,7 +16,7 @@
   "author": "Pieter Colpaert <pieter.colpaert@ugent.be>",
   "license": "MIT",
   "dependencies": {
-    "follow-redirects": "^1.2.3",
+    "follow-redirects": "^1.2.4",
     "http-cache-semantics": "^3.7.3",
     "jsonld": "^0.4.12",
     "n3": "^0.10.0",
