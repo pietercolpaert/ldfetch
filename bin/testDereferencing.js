@@ -78,7 +78,6 @@ var checkPage = function (response, nextPageCallback) {
         if (response2.errors.length > 0) {
           console.error('Errors when requesting ' + uri);
           console.error(response2.errors);
-          //console.error(response2.store.getTriples());
         } else {
           console.error(uri + " validated");
         }
@@ -86,7 +85,6 @@ var checkPage = function (response, nextPageCallback) {
     }
   });
   if (getNextPage(response2)) {
-    console.log("Next page found: " + getNextPage(response2));
     checkPage(getNextPage(response2));
   }
 };
@@ -95,7 +93,7 @@ checkUrl(url1).then(response => {
   if (response.errors.length > 0) {
     console.error(response.errors);
   } else {
-    console.error(url1 + " validated");
+    //console.error(url1 + " validated");
   }
   checkPage(response);
 }, error => {

@@ -3,7 +3,7 @@
 For both the browser as the NodeJS framework it adds features specifically for getting RDF resources.
 
 Supports small extra building blocks:
- * Prefers to read TriG, but also reads N3, turtle, N-Triples, JSON-LD or N-Quads (content-negotiation)
+ * Prefers to read TriG, but also reads N3, turtle, N-Triples, N-Quads, RDFa or JSON-LD (content-negotiation)
  * Returns an N3 store containing the triples for the current document
 
 NodeJS framework in specific
@@ -22,7 +22,7 @@ This library was built for the use within hypermedia agents that follow RDF link
 Adding browsing features (although I do not have a concrete use case for this today):
  * Optionally keeps a history which allows you to jump back, forward, or study the list of visited URIs
  * Able to stop loading a request
- * Refresh a page based on HTTP caching headers (max-age and/or poll for e-tag changes? Or just ping when the current page is out of date?)
+ * Refresh a page based on HTTP caching headers (max-age and/or poll for eTag changes? Or just ping when the current page is out of date?)
 
 Automatically exploiting Hydra links, such as hydra:next, hydra:previous, hydra:search, hydra:filter, etc. The Linked Data Fragments client for recognizing Triple Pattern Fragment and the Linked Connections client for recognizing an lc: departureTimeQuery
 
