@@ -15,6 +15,36 @@ NodeJS framework in specific
 npm install ldfetch
 ```
 
+## How to use it
+
+A small example fetching the previous page of a hydra paged collection and returning its subjects
+```javascript
+var ldfetch = require('../lib/ldfetch.js'),
+    n3 = require('n3');
+var fetch = new ldfetch();
+fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
+fetch.get(url).then(response => {
+  console.error("Redirected to: " + response.url);
+  response.store = new n3.Store(response.triples,{prefixes: response.prefixes});
+  console.log("Requesting the previous page: " + response.store.getTriples(null,"hydra:previous")[0].object);
+  fetch.get(response.store.getTriples(null,"hydra:previous")[0].object).then((response2) => {
+    response2.store = new n3.Store(response2.triples,{prefixes: response2.prefixes});
+    //return the subjects:
+    console.log(response2.store.getSubjects());
+  });
+});
+```
+
+The response object will look like this:
+```json
+{
+  responseCode: 200,
+  triples: [], //Following the N3.js triple representation
+  prefixes: {"hydra": "http://www.w3.org/ns/hydra/core#"},
+  url: "//url after redirects"
+}
+```
+
 ## What we want you to build
 
 This library was built for the use within hypermedia agents that follow RDF links.

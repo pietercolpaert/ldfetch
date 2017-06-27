@@ -1,5 +1,6 @@
 var ldfetch = require('../lib/ldfetch.js');
 var fetch = new ldfetch();
+var n3 = require('n3');
 
 /**
  * This example script shows how you can discover all subjects mentioned on the hydra:previous page of a Linked Data resource
@@ -16,11 +17,14 @@ var url1 = 'http://linked.open.gent/parking';
 console.log("Requesting url1: " + url1);
 fetch.get(url1).then(response => {
   console.log("Redirected to: " + response.url);
+  console.log(response.prefixes);
+  response.store = new n3.Store(response.triples,{prefixes: response.prefixes});
   console.log("Requesting the previous page: " + response.store.getTriples(null,"hydra:previous")[0].object);
   fetch.get(response.store.getTriples(null,"hydra:previous")[0].object).then((response2) => {
+    response2.store = new n3.Store(response.triples,{prefixes: response.prefixes});
+
     console.log("final url that was requested: " + response2.url);
     //just return the subjects:
     console.log(response2.store.getSubjects());
   });
 });
-

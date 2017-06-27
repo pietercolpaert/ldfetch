@@ -1,5 +1,6 @@
 var ldfetch = require('../lib/ldfetch.js');
 var fetch = new ldfetch();
+var n3 = require('n3');
 
 /**
  * This script will retrieve all subjects from a certain URL and will check for dereferenceability
@@ -29,19 +30,24 @@ var checkUrl = function (url) {
   var errors = [];
   return fetch.get(url).then(response => {
     var redirUrl = response.url;
+    response.store = new n3.Store(response.triples,{prefixes: response.prefixes});
     if (response.statusCode !== 200) {
       errors.push(url + ' returns a ' + response.statusCode);
     } else {
       //Check whether the requested URL is used in the page
-      if (!response.store.getTriples(url).length > 0) {
+      if (! ( response.store.countTriples(url) > 0||
+            response.store.countTriples(null, url) > 0 ||
+            response.store.countTriples(null, null, url) > 0 ||
+              response.store.countTriples(null, null, null, url) > 0 )
+            ) {
         errors.push(url + ' cannot be found in its representation');
       }
       //Check whether the redirected URL is used in the page when redirected
       if (redirUrl !== url &&
-          !(response.store.getTriples(redirUrl).length > 0 ||
-            response.store.getTriples(null, redirUrl).length > 0 ||
-            response.store.getTriples(null, null, redirUrl).length > 0 ||
-            response.store.getTriples(null, null, null, redirUrl).length > 0 
+          !(response.store.countTriples(redirUrl) > 0 ||
+            response.store.countTriples(null, redirUrl) > 0 ||
+            response.store.countTriples(null, null, redirUrl) > 0 ||
+            response.store.countTriples(null, null, null, redirUrl) > 0 
            )) {
         errors.push("Redirected " + redirUrl + ' cannot be found in its representation');
       }
