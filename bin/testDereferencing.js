@@ -64,14 +64,15 @@ var checkUrl = function (url) {
 };
 
 var getNextPage = function (response) {
-  var nextPage = response.store.getTriples(response.url, "hydra:next");
+  var nextPage = response.store.getTriples(null, "hydra:next");
   if (nextPage[0]) {
+    console.log('NEXT PAGE: ' + nextPage[0].object);
     return nextPage[0].object;
   } else {
     return null;
   }
 };
-
+var countPages = 1;
 var checkPage = function (response, nextPageCallback) {
   //Now try to request all the subjects and apply the same system.
   var uris = response.store.getSubjects();
@@ -82,28 +83,39 @@ var checkPage = function (response, nextPageCallback) {
     if (uri.substr(0,4) === 'http') {
       checkUrl(uri).then(response2 => {
         if (response2.errors.length > 0) {
-          console.error('Errors when requesting ' + uri);
-          console.error(response2.errors);
+          console.log(response2.errors.length + ' warnings when requesting ' + uri);
+          //console.log(response2.errors);
         } else {
-          console.error(uri + " validated");
+          //console.error(uri + " validated");
         }
       });
     }
   });
-  if (getNextPage(response2)) {
-    checkPage(getNextPage(response2));
+
+  var next = getNextPage(response);
+  if (next) {
+    console.log("Count pages: ", countPages++);
+    checkUrl(next).then(response2 => {
+      if (response2.errors.length > 0) {
+        //console.log(response2.errors);
+      } else {
+        //console.error(url + " validated");
+      }
+      console.log(fetch.getCacheStats());
+      checkPage(response2);
+    });
   }
 };
 
 checkUrl(url1).then(response => {
   if (response.errors.length > 0) {
-    console.error(response.errors);
+    console.log(response.errors);
   } else {
     //console.error(url1 + " validated");
   }
   checkPage(response);
 }, error => {
-  console.error(url1, 'ERROR: ' + error);
+  console.log(url1, 'ERROR: ' + error);
 });
 
 

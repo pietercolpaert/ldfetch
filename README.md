@@ -5,6 +5,7 @@ For both the browser as the NodeJS framework it adds features specifically for g
 Supports small extra building blocks:
  * Prefers to read TriG, but also reads N3, turtle, N-Triples, N-Quads, RDFa or JSON-LD (content-negotiation)
  * Returns an N3 store containing the triples for the current document
+ * Emits events for: `request`, `response`, `redirect`, `cache-hit`, `cache-miss` and `parsed`
 
 NodeJS framework in specific
  * Automatically follows redirects
