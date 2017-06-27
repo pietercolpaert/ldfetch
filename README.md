@@ -31,5 +31,5 @@ Automatically exploiting Hydra links, such as hydra:next, hydra:previous, hydra:
 Focuses on two parts:
 
  1. 2 classes, one for in the browser, and one for in NodeJS (adding caching, redirects and concurrent requests), that take care of the HTTP abstraction
- 2. A class using 1. that picks the right parser and parses the data and stores it in an N3 store
+ 2. A class using 1. that picks the right parser and parses the data and stores it in a memory structure/store of choice
  
