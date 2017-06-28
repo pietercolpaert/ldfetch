@@ -51,10 +51,10 @@ fetch.get(url).then(response => {
 The response object will look like this:
 ```json
 {
-  responseCode: 200,
-  triples: [], //Following the N3.js triple representation
-  prefixes: {"hydra": "http://www.w3.org/ns/hydra/core#"},
-  url: "//url after redirects"
+  "responseCode": 200,
+  "triples": [], //Following the N3.js triple representation
+  "prefixes": {"hydra": "http://www.w3.org/ns/hydra/core#"},
+  "url": "//url after redirects"
 }
 ```
 
