@@ -16,6 +16,18 @@ NodeJS framework in specific
 npm install ldfetch
 ```
 
+And using browserify you can also compile it for browser purposes:
+```bash
+browserify lib/ldfetch-browser.js > build.js
+```
+```html
+<script src="build.js"></script>
+<script>
+  var fetch = new window.ldfetch();
+  //use it as described bellow
+</script>
+```
+
 ## How to use it
 
 A small example fetching the previous page of a hydra paged collection and returning its subjects
