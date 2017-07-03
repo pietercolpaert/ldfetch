@@ -24,6 +24,9 @@ var url1 = process.argv[2];
 //var url1 = 'http://graph.spitsgids.be/'
 //var url1 = 'https://linked.open.gent/parking/?time=2017-06-23T09:52:01';
 
+fetch.on('request', url => { console.log("HTTP " + url); });
+fetch.on('response', url => { console.log("OK " + url); });
+
 //Execute the requestand do something with the response
 
 var checkUrl = function (url) {
