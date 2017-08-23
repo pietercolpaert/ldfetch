@@ -34,7 +34,7 @@ A small example fetching the previous page of a hydra paged collection and retur
 ```javascript
 var ldfetch = require('../lib/ldfetch.js'),
     n3 = require('n3');
-var options = {headers: [{key: 'Accept-Datetime', value: '2017-03-11T17:00:00.000Z'}]}; // optional
+var options = {headers: [{'Accept-Datetime': '2017-03-11T17:00:00.000Z'}]}; // optional
 var fetch = new ldfetch(options);
 fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
 fetch.get(url).then(response => {
@@ -48,7 +48,7 @@ fetch.get(url).then(response => {
   });
 });
 ```
-If HTTP requests with specific headers are needed, the `options` object may be used by defining an array of objects named `headers` with `key` and `value` attributes representing HTTP headers.  
+If HTTP requests with specific headers are needed, the `options` object may be used by defining an array of objects named `headers` representing HTTP headers.  
 
 The response object will look like this:
 ```json
