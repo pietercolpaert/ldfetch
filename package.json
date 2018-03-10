@@ -21,7 +21,7 @@
     "commander": "^2.13.0",
     "follow-redirects": "^1.2.4",
     "http-cache-semantics": "^3.7.3",
-    "jsonld": "^0.4.12",
+    "jsonld": "^0.5.20",
     "jsonld-rdfa-parser": "^1.6.0",
     "n3": "^0.10.0",
     "node-cache": "^4.1.1",
