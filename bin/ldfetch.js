@@ -40,8 +40,9 @@ var processPage = async function (pageUrl) {
   var response = await fetch.get(pageUrl);
   history.push(pageUrl);
   history.push(response.url);
-  if (response.triples) 
-    writer.addTriples(response.triples);
+  if (response.triples) {
+    writer.addQuads(response.triples);
+  }
   for (var i in response.triples) {
     var triple = response.triples[i];
     if (program.predicates.includes(triple.predicate) && !history.includes(triple.object)) {
