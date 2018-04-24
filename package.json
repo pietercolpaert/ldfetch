@@ -18,10 +18,11 @@
   "author": "Pieter Colpaert <pieter.colpaert@ugent.be>",
   "license": "MIT",
   "dependencies": {
-    "cheerio": "^1.0.0-rc.2",
     "commander": "^2.15.1",
     "follow-redirects": "^1.4.1",
+    "html-dom-parser": "^0.1.3",
     "http-cache-semantics": "^3.7.3",
+    "jsdom": "^11.9.0",
     "jsonld": "^1.0.1",
     "jsonld-rdfa-parser": "^1.6.0",
     "n3": "1.0.0-alpha",
@@ -30,6 +31,7 @@
     "wreck": "^12.5.1"
   },
   "browser": {
-    "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js"
+    "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
+    "jsdom": "./lib/BrowserHTMLParser.js"
   }
 }
