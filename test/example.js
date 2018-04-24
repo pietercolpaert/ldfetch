@@ -8,31 +8,17 @@ var n3 = require('n3');
 
 var main = async function () {
   try {
-    //Prefixes to be added to the N3 Store so we can query the data in an easier fashion
+    var url = 'https://graph.irail.be/sncb/connections/';
+    var options = ""; //{headers: {'Accept-Datetime': '2017-03-11T17:00:00.000Z'}}; // optional -- and then we’d have to look for the next page in a more advanced way
+    var fetch = new ldfetch(options);
     fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
-
-    //var url1 = 'http://linked.open.gent/parking';
-    //but works as well flawlessly with this:
-    //var url1 = 'https://graph.irail.be/sncb/connections/';
-    
-    var url1 = 'https://pietercolpaert.be';
-
-    //Execute the request and do something with the response
-    console.log("Requesting url1: " + url1);
-    fetch.on('redirect', urlObj => {
-      console.log(urlObj.from + ' redirected to ' + urlObj.to);
-    });
-    
-    var response = await fetch.get(url1);
-    console.log(response.triples);
-    response.store = new n3.Store(response.triples,{prefixes: response.prefixes});
-    console.log("Requesting the previous page: " + response.store.getTriples(null,"hydra:previous")[0].object);
-    var response2 = await fetch.get(response.store.getTriples(null,"hydra:previous")[0].object);
-
-    response2.store = new n3.Store(response.triples,{prefixes: response.prefixes});
-    console.log("final url that was requested: " + response2.url);
-    //just return the subjects:
-    console.log(response2.store.getSubjects());
+    var response = await fetch.get(url); 
+    for (var i = 0; i < response.triples.length; i ++) {
+      var triple = response.triples[i];
+      if (triple.subject.value === response.url && triple.predicate.value === 'http://www.w3.org/ns/hydra/core#next') {
+        console.error('The next page is: ', triple.object.value);
+      }
+    }
   } catch (e) {
     console.error(e);
   }

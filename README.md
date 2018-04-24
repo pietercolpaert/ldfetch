@@ -2,26 +2,34 @@
 
 For both the browser as the NodeJS framework it adds features specifically for getting RDF resources.
 
-Supports small extra building blocks:
- * Prefers to read TriG, but also reads N3, turtle, N-Triples, N-Quads, RDFa or JSON-LD (content-negotiation)
- * Returns an N3 store containing the triples for the current document
+Supports these features over standard `fetch`:
+ * Prefers to read TriG, yet also reads N3, Turtle, N-Triples, N-Quads, RDFa, JSON-LD snippets hidden in the HTML or just plain JSON-LD (uses content-negotiation to get an RDF representation)
+ * Returns the Triples/Quads containing the data in the [RDFJS triple representation](http://rdf.js.org/)
+ * Returns the URL of the document after redirects
  * Emits events for: `request`, `response`, `redirect`, `cache-hit`, `cache-miss` and `parsed`
 
-NodeJS framework in specific
+Features for the NodeJS framework in specific:
  * Automatically follows redirects
  * Able to be configured with HTTP caching
  * Able to limit the amount of concurrent requests and schedule these
+
+Features for the Command Line:
+ * Writes data on any URL in TriG on stdout
+ * Extra features to automatically follow links (see `ldfetch --help` after `npm install -g ldfetch`)
+
+Install it in your project:
 
 ```bash
 npm install ldfetch
 ```
 
-And using browserify you can also compile it for browser purposes:
+And using webpack you can also compile it for browser purposes:
 ```bash
-browserify lib/ldfetch-browser.js > build.js
+npm run build
 ```
+
 ```html
-<script src="build.js"></script>
+<script src="dist/main.js"></script>
 <script>
   var fetch = new window.ldfetch();
   //use it as described bellow
@@ -30,51 +38,38 @@ browserify lib/ldfetch-browser.js > build.js
 
 ## How to use it
 
-A small example fetching the previous page of a hydra paged collection and returning its subjects
+A small example fetching the next page of a paged collection and returning the url
 ```javascript
-var ldfetch = require('../lib/ldfetch.js'),
-    n3 = require('n3');
-var options = {headers: {'Accept-Datetime': '2017-03-11T17:00:00.000Z'}}; // optional
-var fetch = new ldfetch(options);
-fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
-fetch.get(url).then(response => {
-  console.error("Redirected to: " + response.url);
-  response.store = new n3.Store(response.triples,{prefixes: response.prefixes});
-  console.log("Requesting the previous page: " + response.store.getTriples(null,"hydra:previous")[0].object);
-  fetch.get(response.store.getTriples(null,"hydra:previous")[0].object).then((response2) => {
-    response2.store = new n3.Store(response2.triples,{prefixes: response2.prefixes});
-    //return the subjects:
-    console.log(response2.store.getSubjects());
-  });
-});
-```
-If HTTP requests with specific headers are needed, the `options` object may be used by defining an object inside of it, named `headers` containig HTTP header names and values.  
+  var ldfetch = require('../lib/ldfetch.js');
+  try {
+    var url = 'https://graph.irail.be/sncb/connections/';
+    var options = ""; //{headers: {'Accept-Datetime': '2017-03-11T17:00:00.000Z'}}; // optional -- and then we’d have to look for the next page in a more advanced way
+    var fetch = new ldfetch(options);
+    fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
+    var response = await fetch.get(url); 
+    for (var i = 0; i < response.triples.length; i ++) {
+      var triple = response.triples[i];
+      if (triple.subject.value === response.url && triple.predicate.value === 'http://www.w3.org/ns/hydra/core#next') {
+        console.error('The next page is: ', triple.object.value);
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  ```
+  
+If HTTP requests with specific headers are needed, the `options` object may be used by defining an object inside of it, named `headers` containig HTTP header names and values.
 
 The response object will look like this:
 ```json
 {
   "responseCode": 200,
-  "triples": [], //Following the N3.js triple representation
+  "triples": [{},{},{}],
   "prefixes": {"hydra": "http://www.w3.org/ns/hydra/core#"},
-  "url": "//url after redirects"
+  "url": "https://{url after redirects}"
 }
 ```
 
-## What we want you to build
+## License and copyright
 
-This library was built for the use within hypermedia agents that follow RDF links.
-
-Adding browsing features (although I do not have a concrete use case for this today):
- * Optionally keeps a history which allows you to jump back, forward, or study the list of visited URIs
- * Able to stop loading a request
- * Refresh a page based on HTTP caching headers (max-age and/or poll for eTag changes? Or just ping when the current page is out of date?)
-
-Automatically exploiting Hydra links, such as hydra:next, hydra:previous, hydra:search, hydra:filter, etc. The Linked Data Fragments client for recognizing Triple Pattern Fragment and the Linked Connections client for recognizing an lc: departureTimeQuery
-
-## Architecture
-
-Focuses on two parts:
-
- 1. 2 classes, one for in the browser, and one for in NodeJS (adding caching, redirects and concurrent requests), that take care of the HTTP abstraction
- 2. A class using 1. that picks the right parser and parses the data and stores it in a memory structure/store of choice
- 
+This library was developed by [Pieter Colpaert](https://pietercolpaert.be) and contributors. The source code is available under an MIT license.
