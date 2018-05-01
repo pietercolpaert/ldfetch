@@ -23,14 +23,14 @@
     "http-cache-semantics": "^3.7.3",
     "jsdom": "^11.9.0",
     "jsonld": "^1.0.1",
-    "jsonld-rdfa-parser": "^1.6.0",
     "n3": "1.0.0-alpha",
     "node-cache": "^4.2.0",
     "q": "^1.5.1",
+    "rdfa-processor": "^0.0.2",
     "wreck": "^12.5.1"
   },
   "browser": {
     "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
-    "jsdom": "./lib/BrowserHTMLParser.js"
+    "./lib/NodeHTMLParser.js": "./lib/BrowserHTMLParser.js"
   }
 }

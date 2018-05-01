@@ -1,3 +1,4 @@
 module.exports = {
-  entry: './lib/ldfetch-browser.js'
+  entry: './lib/ldfetch-browser.js',
+  mode: 'development'
 };
