@@ -36,8 +36,11 @@ var url = process.argv[2];
 var writer = n3.Writer(process.stdout, {end: false});
 
 var processPage = async function (pageUrl) {
-  console.error('HTTP REQUEST - ' + pageUrl);
+  console.error('GET ' + pageUrl);
+  var startTime = new Date();
   var response = await fetch.get(pageUrl);
+  var endTime = new Date();
+  console.error('' + response.statusCode + ' ' +response.url + ' (' + (endTime.getTime() - startTime.getTime()) + 'ms)');
   history.push(pageUrl);
   history.push(response.url);
   if (response.triples) {
@@ -45,8 +48,8 @@ var processPage = async function (pageUrl) {
   }
   for (var i in response.triples) {
     var triple = response.triples[i];
-    if (program.predicates.includes(triple.predicate) && !history.includes(triple.object)) {
-      await processPage(triple.object);
+    if (program.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value)) {
+      await processPage(triple.object.value);
     }
   }
 }
