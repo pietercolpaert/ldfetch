@@ -1,6 +1,6 @@
 {
   "name": "ldfetch",
-  "version": "1.0.0",
+  "version": "1.0.0-alpha",
   "description": "An HTTP library initially written for Linked Connections purposes",
   "bin": "bin/ldfetch.js",
   "main": "lib/ldfetch.js",
