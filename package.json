@@ -1,7 +1,7 @@
 {
   "name": "ldfetch",
-  "version": "1.0.0-alpha",
-  "description": "An HTTP library initially written for Linked Connections purposes",
+  "version": "1.0.1-alpha",
+  "description": "Linked Data Fetch HTTP RDF library for NodeJS and browser",
   "bin": "bin/ldfetch.js",
   "main": "lib/ldfetch.js",
   "scripts": {
@@ -17,12 +17,19 @@
   ],
   "author": "Pieter Colpaert <pieter.colpaert@ugent.be>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/pietercolpaert/ldfetch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pietercolpaert/ldfetch/issues"
+  },
   "dependencies": {
     "commander": "^2.15.1",
     "follow-redirects": "^1.4.1",
     "http-cache-semantics": "^3.7.3",
     "jsdom": "^11.9.0",
-    "jsonld": "^1.0.1",
+    "jsonld": "^1.0.x",
     "n3": "1.0.0-alpha",
     "node-cache": "^4.2.0",
     "q": "^1.5.1",
