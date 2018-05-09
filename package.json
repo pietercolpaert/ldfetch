@@ -1,6 +1,5 @@
 {
   "name": "ldfetch",
-  "version": "1.0.1-alpha",
   "description": "Linked Data Fetch HTTP RDF library for NodeJS and browser",
   "bin": "bin/ldfetch.js",
   "main": "lib/ldfetch.js",
@@ -33,7 +32,7 @@
     "n3": "1.0.0-alpha",
     "node-cache": "^4.2.0",
     "q": "^1.5.1",
-    "rdfa-processor": "^0.0.2",
+    "rdfa-processor": "^0.0.3",
     "wreck": "^12.5.1"
   },
   "browser": {
