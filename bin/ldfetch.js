@@ -1,4 +1,4 @@
-#!/usr/bin/node
+#!/usr/bin/env node
 var ldfetch = require('../lib/ldfetch.js');
 var fetch = new ldfetch();
 var n3 = require('n3');
