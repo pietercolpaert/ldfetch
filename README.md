@@ -1,5 +1,7 @@
 # Linked Data Fetch: a HTTP client for RDF resources
 
+[![npm version](https://badge.fury.io/js/ldfetch.svg)](https://badge.fury.io/js/ldfetch)
+
 For both the browser as the NodeJS framework it adds features specifically for getting RDF resources.
 
 Supports these features over standard `fetch`:
