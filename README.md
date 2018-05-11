@@ -23,7 +23,15 @@ Install it in your project:
 npm install ldfetch
 ```
 
-And using webpack you can also compile it for browser purposes:
+## How to use it
+
+### Command line
+
+![Quite easy](https://github.com/pietercolpaert/ldfetch/raw/master/src/tty.gif "Straightforward to use this on a CLI")
+
+### Browser
+
+And using webpack you can compile it for browser purposes:
 ```bash
 npm run build
 ```
@@ -32,20 +40,26 @@ npm run build
 <script src="dist/main.js"></script>
 <script>
   var fetch = new window.ldfetch();
-  //use it as described bellow
+  var main = async function () {
+    var response = await fetch.get('http://ruben.verborgh.org');
+    console.log(response.triples);
+  }
+  try {
+    main();
+  } catch (e) {
+    console.error(e);
+  }
 </script>
 ```
 
-## How to use it
+### NodeJS
 
 A small example fetching the next page of a paged collection and returning the url
 ```javascript
   var ldfetch = require('../lib/ldfetch.js');
   try {
     var url = 'https://graph.irail.be/sncb/connections/';
-    var options = ""; //{headers: {'Accept-Datetime': '2017-03-11T17:00:00.000Z'}}; // optional -- and then we’d have to look for the next page in a more advanced way
-    var fetch = new ldfetch(options);
-    fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
+    var fetch = new ldfetch({}); //options: allow to add more headers if needed
     var response = await fetch.get(url); 
     for (var i = 0; i < response.triples.length; i ++) {
       var triple = response.triples[i];
@@ -56,16 +70,15 @@ A small example fetching the next page of a paged collection and returning the u
   } catch (e) {
     console.error(e);
   }
-  ```
+```
   
-If HTTP requests with specific headers are needed, the `options` object may be used by defining an object inside of it, named `headers` containig HTTP header names and values.
+If HTTP requests with specific headers are needed, the `options` object may be used by defining an object inside of it, named `headers` containing HTTP header names and values.
 
 The response object will look like this:
 ```json
 {
   "responseCode": 200,
   "triples": [{},{},{}],
-  "prefixes": {"hydra": "http://www.w3.org/ns/hydra/core#"},
   "url": "https://{url after redirects}"
 }
 ```
