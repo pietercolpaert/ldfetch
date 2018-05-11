@@ -29,7 +29,7 @@ npm install ldfetch
 
 ### Command line
 
-![Quite easy](https://github.com/pietercolpaert/ldfetch/raw/master/src/tty.gif "Straightforward to use this on a CLI")
+![Quite easy](https://raw.githubusercontent.com/pietercolpaert/ldfetch/master/tty.gif "Straightforward to use this on a CLI")
 
 ### Browser
 
