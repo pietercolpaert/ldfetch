@@ -29,13 +29,16 @@
     "cacheable-request": "^2.1.4",
     "commander": "^2.15.1",
     "decompress-response": "^3.3.0",
-    "follow-redirects": "^1.4.1",
-    "jsdom": "^11.9.0",
-    "jsonld": "^1.0.x",
+    "follow-redirects": "^1.5.0",
+    "http-cache-semantics": "^4.0.0",
+    "jsdom": "^11.11.0",
+    "jsonld": "^1.0.2",
     "keyv": "^3.0.0",
     "n3": "1.0.0-alpha",
     "q": "^1.5.1",
-    "rdfa-processor": "^0.0.5"
+    "rdfa-processor": "^0.0.5",
+    "rdfxmlprocessor": "^0.0.3-alpha",
+    "xmldom": "^0.1.27"
   },
   "browser": {
     "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
