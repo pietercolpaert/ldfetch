@@ -58,8 +58,11 @@ var processPage = async function (pageUrl) {
   }
 }
 
+
 processPage(url).then(()=> {
   writer.end();
   console.log(""); //newline at end of stdout
+}, (error) => {
+  console.error(error);
 });
 
