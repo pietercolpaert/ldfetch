@@ -31,6 +31,11 @@ npm install ldfetch
 
 ![Quite easy](https://raw.githubusercontent.com/pietercolpaert/ldfetch/master/tty.gif "Straightforward to use this on a CLI")
 
+Or a more advanced example with [JSON-LD framing](https://json-ld.org/spec/latest/json-ld-framing/) to find out what my colleague [Ruben Verborgh](https://ruben.verborgh.org/profile/#me) knows about [me](https://pietercolpaert.be/#me):
+
+![Quite easy 2](https://raw.githubusercontent.com/pietercolpaert/ldfetch/master/tty2.gif "A more advanced example")
+
+
 ### Browser
 
 And using webpack you can compile it for browser purposes:
