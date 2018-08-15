@@ -49,7 +49,7 @@ var processPage = async function (pageUrl) {
     }
     for (var i in response.triples) {
       var triple = response.triples[i];
-      if (program.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value)) {
+      if (program.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value) && triple.object.termType === 'NamedNode') {
         await processPage(triple.object.value);
       }
     }
@@ -58,8 +58,11 @@ var processPage = async function (pageUrl) {
   }
 }
 
+
 processPage(url).then(()=> {
   writer.end();
   console.log(""); //newline at end of stdout
+}, (error) => {
+  console.error(error);
 });
 

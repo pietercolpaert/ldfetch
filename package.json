@@ -25,16 +25,18 @@
     "url": "https://github.com/pietercolpaert/ldfetch/issues"
   },
   "dependencies": {
-    "commander": "^2.15.1",
-    "follow-redirects": "^1.4.1",
+    "commander": "^2.17.1",
+    "follow-redirects": "^1.5.5",
     "http-cache-semantics": "^3.7.3",
-    "jsdom": "^11.9.0",
-    "jsonld": "^1.0.x",
+    "jsdom": "^11.12.0",
+    "jsonld": "^1.0.2",
     "n3": "1.0.0-alpha",
     "node-cache": "^4.2.0",
     "q": "^1.5.1",
     "rdfa-processor": "^0.0.5",
-    "wreck": "^12.5.1"
+    "rdfxmlprocessor": "0.0.3-alpha",
+    "wreck": "^12.5.1",
+    "xmldom": "^0.1.27"
   },
   "browser": {
     "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
