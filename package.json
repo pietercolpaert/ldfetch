@@ -25,10 +25,10 @@
     "url": "https://github.com/pietercolpaert/ldfetch/issues"
   },
   "dependencies": {
-    "commander": "^2.15.1",
-    "follow-redirects": "^1.5.0",
+    "commander": "^2.17.1",
+    "follow-redirects": "^1.5.5",
     "http-cache-semantics": "^3.7.3",
-    "jsdom": "^11.11.0",
+    "jsdom": "^11.12.0",
     "jsonld": "^1.0.2",
     "n3": "1.0.0-alpha",
     "node-cache": "^4.2.0",
