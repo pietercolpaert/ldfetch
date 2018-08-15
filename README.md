@@ -41,10 +41,14 @@ npm run build
 ```html
 <script src="dist/main.js"></script>
 <script>
-  var fetch = new window.ldfetch();
-  var main = async function () {
-    var response = await fetch.get('http://ruben.verborgh.org');
-    console.log(response.triples);
+  let fetcher = new window.ldfetch();
+  let main = async function () {
+    let objects = await fetcher.get('http://ruben.verborgh.org').then(response => {
+      //LDFetch also exposes a frame function that can be used on the triples
+      //See https://json-ld.org/spec/latest/json-ld-framing/
+      return fetcher.frame(response.triples, {'@graph':{}});
+    });
+    console.log(objects);
   }
   try {
     main();
@@ -58,17 +62,20 @@ npm run build
 
 A small example fetching the next page of a paged collection and returning the url
 ```javascript
-  var ldfetch = require('../lib/ldfetch.js');
+  let ldfetch = require('../lib/ldfetch.js');
   try {
-    var url = 'https://graph.irail.be/sncb/connections/';
-    var fetch = new ldfetch({}); //options: allow to add more headers if needed
-    var response = await fetch.get(url); 
-    for (var i = 0; i < response.triples.length; i ++) {
-      var triple = response.triples[i];
+    let url = 'https://graph.irail.be/sncb/connections/';
+    let fetch = new ldfetch({}); //options: allow to add more headers if needed
+    let response = await fetch.get(url); 
+    for (let i = 0; i < response.triples.length; i ++) {
+      let triple = response.triples[i];
       if (triple.subject.value === response.url && triple.predicate.value === 'http://www.w3.org/ns/hydra/core#next') {
         console.error('The next page is: ', triple.object.value);
       }
     }
+    fetch.frame(response.triples, {'http://www.w3.org/ns/hydra/core#next': {}}).then(object => {
+      console.error('Or you can also use the JSON-LD frame functionality to get what you want in a JS object', object);
+    });
   } catch (e) {
     console.error(e);
   }

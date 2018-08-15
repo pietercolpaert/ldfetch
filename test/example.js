@@ -8,19 +8,21 @@ var n3 = require('n3');
 
 var main = async function () {
   try {
-    var url = 'https://graph.irail.be/sncb/connections/';
-    var options = ""; //{headers: {'Accept-Datetime': '2017-03-11T17:00:00.000Z'}}; // optional -- and then we’d have to look for the next page in a more advanced way
-    var fetch = new ldfetch(options);
-    fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
-    var response = await fetch.get(url); 
-    for (var i = 0; i < response.triples.length; i ++) {
-      var triple = response.triples[i];
+    let url = 'https://graph.irail.be/sncb/connections/';
+    let fetch = new ldfetch({}); //options: allow to add more headers if needed
+    let response = await fetch.get(url);
+    for (let i = 0; i < response.triples.length; i ++) {
+      let triple = response.triples[i];
       if (triple.subject.value === response.url && triple.predicate.value === 'http://www.w3.org/ns/hydra/core#next') {
         console.error('The next page is: ', triple.object.value);
       }
     }
+    fetch.frame(response.triples, {'http://www.w3.org/ns/hydra/core#next': {}}).then(object => {
+      console.error('Or you can also use the JSON-LD frame functionality to get what you want in a JS object', object);
+    });
   } catch (e) {
     console.error(e);
   }
 }
 main();
+
