@@ -48,7 +48,8 @@ var processPage = async function (pageUrl) {
     if (response.triples) {
       if (program.frame) {
         let frame = JSON.parse(program.frame);
-        console.log(JSON.stringify(await fetch.frame(response.triples, frame)));
+        let object = await fetch.frame(response.triples, frame);
+        console.log(JSON.stringify(object));
       } else {
         writer.addQuads(response.triples);
       }
@@ -56,7 +57,11 @@ var processPage = async function (pageUrl) {
     for (var i in response.triples) {
       var triple = response.triples[i];
       if (program.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value) && triple.object.termType === 'NamedNode') {
-        await processPage(triple.object.value);
+        try {
+          await processPage(triple.object.value);
+        } catch (e) {
+          console.error('Failed to retrieve ' + pageUrl + ':' + e + ' -- But continuing');
+        }
       }
     }
   } catch (e) {
@@ -65,10 +70,8 @@ var processPage = async function (pageUrl) {
 }
 
 
-processPage(url).then(()=> {
+processPage(url).then(() => {
   writer.end();
   console.log(""); //newline at end of stdout
-}, (error) => {
-  console.error(error);
 });
 
