@@ -13,6 +13,7 @@ var list = function (val) {
 
 program
   .option('-p, --predicates <predicates ...>', 'Some predicates can be followed [predicates]', list)
+  .option('--frame <jsonldframe>', 'Add a JSON-LD frame')
   .arguments('<url>')
   .action(function (argUrl) {
     //TODO: check whether starts with http(s)?
@@ -45,12 +46,22 @@ var processPage = async function (pageUrl) {
     history.push(pageUrl);
     history.push(response.url);
     if (response.triples) {
-      writer.addQuads(response.triples);
+      if (program.frame) {
+        let frame = JSON.parse(program.frame);
+        let object = await fetch.frame(response.triples, frame);
+        console.log(JSON.stringify(object));
+      } else {
+        writer.addQuads(response.triples);
+      }
     }
     for (var i in response.triples) {
       var triple = response.triples[i];
       if (program.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value) && triple.object.termType === 'NamedNode') {
-        await processPage(triple.object.value);
+        try {
+          await processPage(triple.object.value);
+        } catch (e) {
+          console.error('Failed to retrieve ' + pageUrl + ':' + e + ' -- But continuing');
+        }
       }
     }
   } catch (e) {
@@ -59,10 +70,8 @@ var processPage = async function (pageUrl) {
 }
 
 
-processPage(url).then(()=> {
+processPage(url).then(() => {
   writer.end();
   console.log(""); //newline at end of stdout
-}, (error) => {
-  console.error(error);
 });
 

@@ -17,7 +17,7 @@ var main = async function () {
         console.error('The next page is: ', triple.object.value);
       }
     }
-    fetch.frame(response.triples, {'http://www.w3.org/ns/hydra/core#next': {}}).then(object => {
+    fetch.frame(url, {'http://www.w3.org/ns/hydra/core#next': {}}).then(object => {
       console.error('Or you can also use the JSON-LD frame functionality to get what you want in a JS object', object);
     });
   } catch (e) {
