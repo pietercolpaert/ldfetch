@@ -41,5 +41,9 @@
   "browser": {
     "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
     "./lib/NodeHTMLParser.js": "./lib/BrowserHTMLParser.js"
+  },
+  "devDependencies": {
+    "webpack": "^4.20.2",
+    "webpack-cli": "^3.1.2"
   }
 }
