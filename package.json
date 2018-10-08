@@ -25,8 +25,9 @@
     "url": "https://github.com/pietercolpaert/ldfetch/issues"
   },
   "dependencies": {
-    "commander": "^2.15.1",
-    "follow-redirects": "^1.5.0",
+    "@rdfjs/data-model": "^1.1.0",
+    "commander": "^2.17.1",
+    "follow-redirects": "^1.5.5",
     "http-cache-semantics": "^3.7.3",
     "jsdom": "^11.11.0",
     "jsonld": "^1.0.2",
