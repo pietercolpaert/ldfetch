@@ -31,10 +31,9 @@ npm install ldfetch
 
 ![Quite easy](https://raw.githubusercontent.com/pietercolpaert/ldfetch/master/tty.gif "Straightforward to use this on a CLI")
 
-Or a more advanced example with [JSON-LD framing](https://json-ld.org/spec/latest/json-ld-framing/) to find out what my colleague [Ruben Verborgh](https://ruben.verborgh.org/profile/#me) knows about [me](https://pietercolpaert.be/#me):
+You can also use [JSON-LD framing](https://json-ld.org/spec/latest/json-ld-framing/) from the CLI: `ldfetch https://pietercolpaert.be/ --frame {}` to return a JSON-LD object complying to your frame.
 
-![Quite easy 2](https://raw.githubusercontent.com/pietercolpaert/ldfetch/master/tty2.gif "A more advanced example")
-
+For full, well tested and modular SPARQL or GraphQL Web Querying, we refer to the [Comunica project](http://comunica.linkeddatafragments.org).
 
 ### Browser
 
