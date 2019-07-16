@@ -34,7 +34,7 @@ if (!process.argv[2]) {
 var history = [url];
 
 var url = process.argv[2];
-var writer = n3.Writer(process.stdout, {end: false});
+var writer = new n3.Writer(process.stdout, {end: false});
 
 var processPage = async function (pageUrl) {
   console.error('GET ' + pageUrl);

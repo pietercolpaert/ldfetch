@@ -1,6 +1,6 @@
 {
   "name": "ldfetch",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Linked Data Fetch HTTP RDF library for NodeJS and browser",
   "bin": "bin/ldfetch.js",
   "main": "lib/ldfetch.js",
@@ -25,16 +25,16 @@
     "url": "https://github.com/pietercolpaert/ldfetch/issues"
   },
   "dependencies": {
-    "@rdfjs/data-model": "^1.1.0",
-    "commander": "^2.17.1",
-    "follow-redirects": "^1.5.5",
+    "@rdfjs/data-model": "^1.1.1",
+    "commander": "^2.19.0",
+    "follow-redirects": "^1.7.0",
     "http-cache-semantics": "^3.7.3",
     "jsdom": "^11.12.0",
     "jsonld": "^1.5.4",
-    "n3": "^1.0.x",
+    "n3": "^1.0.5",
     "node-cache": "^4.2.0",
     "q": "^1.5.1",
-    "rdfa-processor": "^0.0.5",
+    "rdfa-processor": "^0.0.6",
     "rdfxmlprocessor": "0.0.3-alpha",
     "wreck": "^12.5.1",
     "xmldom": "^0.1.27"
@@ -44,7 +44,7 @@
     "./lib/NodeHTMLParser.js": "./lib/BrowserHTMLParser.js"
   },
   "devDependencies": {
-    "webpack": "^4.20.2",
+    "webpack": "^4.29.6",
     "webpack-cli": "^3.3.0"
   }
 }
