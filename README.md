@@ -1,11 +1,19 @@
 # Linked Data Fetch: a HTTP client for RDF resources
 
-[![npm version](https://badge.fury.io/js/ldfetch.svg)](https://badge.fury.io/js/ldfetch)
+[![npm version](https://badge.fury.io/js/ldfetch.svg)](https://badge.fury.io/js/ldfetch) [![CDN JSDelivr](https://data.jsdelivr.com/v1/package/npm/ldfetch/badge)](https://cdn.jsdelivr.net/npm/ldfetch/dist/main.js)
 
-For both the browser as the NodeJS framework it adds features specifically for getting RDF resources.
+Fetch Linked Data documents within your browser, from the command line, or from your NodeJS script.
+
+```bash
+npm install -g ldfetch
+```
+In order to use it as a library, you can leave out the `-g`.
+
+## Features
 
 Supports these features over standard `fetch`:
- * Prefers to read TriG, yet also reads N3, Turtle, N-Triples, N-Quads, RDFa, JSON-LD snippets hidden in the HTML or just plain JSON-LD (uses content-negotiation to get an RDF representation)
+ * Sets an accept header for negotiating an RDF serialization
+ * Uses [rdf-parse](https://github.com/rubensworks/rdf-parse.js) by Ruben Taelman to parse a wide variety of RDF serializations
  * Returns the Triples/Quads containing the data in the [RDFJS triple representation](http://rdf.js.org/)
  * Returns the URL of the document after redirects
  * Emits events for: `request`, `response`, `redirect`, `cache-hit`, `cache-miss` and `parsed`
@@ -18,12 +26,6 @@ Features for the NodeJS framework in specific:
 Features for the Command Line:
  * Writes data on any URL in TriG on stdout
  * Extra features to automatically follow links (see `ldfetch --help` after `npm install -g ldfetch`)
-
-Install it in your project:
-
-```bash
-npm install ldfetch
-```
 
 ## How to use it
 
