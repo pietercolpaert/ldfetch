@@ -1,6 +1,6 @@
 {
   "name": "ldfetch",
-  "version": "1.2.2",
+  "version": "1.2.4",
   "description": "Linked Data Fetch HTTP RDF library for NodeJS and browser",
   "bin": "bin/ldfetch.js",
   "main": "lib/ldfetch.js",
