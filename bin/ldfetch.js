@@ -21,7 +21,9 @@ program
   })
   .parse(process.argv);
 
-if (!program.predicates)  program.predicates = [];
+let options = program.opts();
+
+if (!options.predicates)  options.predicates = [];
 
 //Prefixes to be added to the N3 Store so we can query the data in an easier fashion
 fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
@@ -46,8 +48,8 @@ var processPage = async function (pageUrl) {
     history.push(pageUrl);
     history.push(response.url);
     if (response.triples) {
-      if (program.frame) {
-        let frame = JSON.parse(program.frame);
+      if (options.frame) {
+        let frame = JSON.parse(options.frame);
         let object = await fetch.frame(response.triples, frame);
         console.log(JSON.stringify(object));
       } else {
@@ -56,7 +58,7 @@ var processPage = async function (pageUrl) {
     }
     for (var i in response.triples) {
       var triple = response.triples[i];
-      if (program.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value) && triple.object.termType === 'NamedNode') {
+      if (options.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value) && triple.object.termType === 'NamedNode') {
         try {
           await processPage(triple.object.value);
         } catch (e) {

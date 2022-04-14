@@ -1,4 +1,10 @@
+const NodePolyfillPlugin = require("node-polyfill-webpack-plugin")
+
 module.exports = {
   entry: './lib/ldfetch-browser.js',
-//  mode: 'development'
-};
+  // Other rules...
+  plugins: [
+    new NodePolyfillPlugin()
+  ]
+  //  mode: 'development'
+}
