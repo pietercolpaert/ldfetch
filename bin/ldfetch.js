@@ -3,6 +3,8 @@ var ldfetch = require('../lib/ldfetch.js');
 var fetch = new ldfetch();
 var n3 = require('n3');
 var program = require('commander');
+var path = require('path');
+var fs = require('fs');
 
 var url = "";
 console.error('LDFetch. Use --help to discover more instructions');
@@ -13,7 +15,7 @@ var list = function (val) {
 
 program
   .option('-p, --predicates <predicates ...>', 'Some predicates can be followed [predicates]', list)
-  .option('--frame <jsonldframe>', 'Add a JSON-LD frame')
+  .option('--frame <jsonldframe|file>', 'Add a JSON-LD frame')
   .arguments('<url>')
   .action(function (argUrl) {
     //TODO: check whether starts with http(s)?
@@ -48,8 +50,15 @@ var processPage = async function (pageUrl) {
     history.push(pageUrl);
     history.push(response.url);
     if (response.triples) {
-      if (options.frame) {
-        let frame = JSON.parse(options.frame);
+      if (program.frame) {
+        let frame;
+
+        if (fs.existsSync(program.frame)) {
+          frame = JSON.parse(fs.readFileSync(program.frame));
+        }
+        else {
+          frame = JSON.parse(program.frame);
+        }
         let object = await fetch.frame(response.triples, frame);
         console.log(JSON.stringify(object));
       } else {
