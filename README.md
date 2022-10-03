@@ -39,7 +39,7 @@ For full, well tested and modular SPARQL or GraphQL Web Querying, we refer to th
 
 ### Browser
 
-And using webpack you can compile it for browser purposes:
+And using Browserify you can compile it for browser purposes:
 ```bash
 npm run build
 ```

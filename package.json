@@ -1,12 +1,12 @@
 {
   "name": "ldfetch",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Linked Data Fetch HTTP RDF library for NodeJS and browser",
   "bin": "bin/ldfetch.js",
   "main": "lib/ldfetch.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack"
+    "build": "./node_modules/browserify/bin/cmd.js lib/ldfetch-browser.js > dist/main.js"
   },
   "keywords": [
     "http",
@@ -28,19 +28,22 @@
     "@hapi/wreck": "^17.x.x",
     "commander": "^8.x.x",
     "follow-redirects": "^1.x.x",
+    "https-browserify": "^1.0.0",
     "jsonld": "^5.x.x",
     "node-cache": "^4.2.1",
-    "node-polyfill-webpack-plugin": "^1.1.4",
     "q": "^1.5.1",
     "rdf-parse": "^2.x.x",
-    "string-to-stream": "^3.0.1"
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "string-to-stream": "^3.0.1",
+    "url": "^0.11.0",
+    "util": "^0.12.4"
   },
   "browser": {
     "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
     "./lib/NodeHTMLParser.js": "./lib/BrowserHTMLParser.js"
   },
   "devDependencies": {
-    "webpack": "^5.72.0",
-    "webpack-cli": "^4.9.1"
+    "browserify": "^17.0.0"
   }
 }

@@ -56,8 +56,7 @@ var processPage = async function (pageUrl) {
         writer.addQuads(response.triples);
       }
     }
-    for (var i in response.triples) {
-      var triple = response.triples[i];
+    for (let triple of response.triples) {
       if (options.predicates.includes(triple.predicate.value) && !history.includes(triple.object.value) && triple.object.termType === 'NamedNode') {
         try {
           await processPage(triple.object.value);
