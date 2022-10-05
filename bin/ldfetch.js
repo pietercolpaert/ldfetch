@@ -50,14 +50,14 @@ var processPage = async function (pageUrl) {
     history.push(pageUrl);
     history.push(response.url);
     if (response.triples) {
-      if (program.frame) {
+      if (options.frame) {
         let frame;
 
-        if (fs.existsSync(program.frame)) {
-          frame = JSON.parse(fs.readFileSync(program.frame));
+        if (fs.existsSync(options.frame)) {
+          frame = JSON.parse(fs.readFileSync(options.frame));
         }
         else {
-          frame = JSON.parse(program.frame);
+          frame = JSON.parse(options.frame);
         }
         let object = await fetch.frame(response.triples, frame);
         console.log(JSON.stringify(object));
