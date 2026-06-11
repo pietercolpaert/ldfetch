@@ -2,7 +2,7 @@
 var ldfetch = require('../lib/ldfetch.js');
 var fetch = new ldfetch();
 var n3 = require('n3');
-var program = require('commander');
+var program = require('commander').program;
 var path = require('path');
 var fs = require('fs');
 

@@ -1,13 +1,25 @@
 {
   "name": "ldfetch",
-  "version": "1.2.8",
-  "description": "Linked Data Fetch HTTP RDF library for NodeJS and browser",
-  "bin": "bin/ldfetch.js",
+  "version": "1.2.9",
+  "description": "Linked Data Fetch HTTP RDF library for Node.js and browsers",
+  "type": "commonjs",
+  "bin": {
+    "ldfetch": "./bin/ldfetch.js"
+  },
   "main": "lib/ldfetch.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "./node_modules/browserify/bin/cmd.js lib/ldfetch-browser.js > dist/main.js"
+    "test": "node --test test/*.test.js",
+    "build": "browserify lib/ldfetch-browser.js --outfile dist/main.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "lib",
+    "README.md"
+  ],
   "keywords": [
     "http",
     "rdf",
@@ -19,31 +31,32 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git://github.com/pietercolpaert/ldfetch.git"
+    "url": "https://github.com/pietercolpaert/ldfetch.git"
   },
   "bugs": {
     "url": "https://github.com/pietercolpaert/ldfetch/issues"
   },
   "dependencies": {
-    "@hapi/wreck": "^17.x.x",
-    "commander": "^8.x.x",
-    "follow-redirects": "^1.x.x",
+    "@hapi/wreck": "^18.1.2",
+    "commander": "^15.0.0",
+    "follow-redirects": "^1.16.0",
     "https-browserify": "^1.0.0",
-    "jsonld": "^5.x.x",
+    "jsonld": "^9.0.0",
+    "n3": "^2.0.3",
     "node-cache": "^4.2.1",
     "q": "^1.5.1",
-    "rdf-parse": "^2.x.x",
+    "rdf-parse": "^2.3.3",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
     "string-to-stream": "^3.0.1",
-    "url": "^0.11.0",
-    "util": "^0.12.4"
+    "url": "^0.11.4",
+    "util": "^0.12.5"
   },
   "browser": {
     "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
     "./lib/NodeHTMLParser.js": "./lib/BrowserHTMLParser.js"
   },
   "devDependencies": {
-    "browserify": "^17.0.0"
+    "browserify": "^17.0.1"
   }
 }
