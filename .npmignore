@@ -1,0 +1,28 @@
+# Dependency directories
+node_modules/
+
+# Test and coverage output
+coverage/
+test/
+*.test.js
+.nyc_output/
+
+# Development and editor files
+.git/
+.github/
+.vscode/
+.idea/
+*.log
+.DS_Store
+.env
+.env.*
+
+# Temporary/cache files
+.cache/
+tmp/
+temp/
+*.tmp
+
+# Build inputs and local examples
+example/
+examples/
