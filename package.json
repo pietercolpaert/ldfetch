@@ -9,7 +9,7 @@
   "main": "lib/ldfetch.js",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "build": "browserify lib/ldfetch-browser.js --outfile dist/main.js"
+    "build": "node build/build.js"
   },
   "engines": {
     "node": ">=18"
@@ -38,11 +38,13 @@
   },
   "dependencies": {
     "@hapi/wreck": "^18.1.2",
+    "buffer": "^6.0.3",
     "commander": "^15.0.0",
     "follow-redirects": "^1.16.0",
     "https-browserify": "^1.0.0",
     "jsonld": "^9.0.0",
     "node-cache": "^5.1.2",
+    "process": "^0.11.10",
     "q": "^2.0.3",
     "rdf-parse": "^5.0.0",
     "rdf-writer-ts": "^0.1.1",
@@ -53,10 +55,9 @@
     "util": "^0.12.5"
   },
   "browser": {
-    "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js",
-    "./lib/NodeHTMLParser.js": "./lib/BrowserHTMLParser.js"
+    "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js"
   },
   "devDependencies": {
-    "browserify": "^17.0.1"
+    "esbuild": "^0.28.2"
   }
 }

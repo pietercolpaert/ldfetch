@@ -39,7 +39,7 @@ For full, well tested and modular SPARQL or GraphQL Web Querying, we refer to th
 
 ### Browser
 
-And using Browserify you can compile it for browser purposes:
+And using esbuild you can compile it for browser purposes:
 ```bash
 npm run build
 ```
@@ -49,7 +49,7 @@ npm run build
 <script>
   let fetcher = new window.ldfetch();
   let main = async function () {
-    let objects = await fetcher.get('http://ruben.verborgh.org').then(response => {
+    let objects = await fetcher.get('https://staging.api.irail.be/graph/').then(response => {
       //LDFetch also exposes a frame function that can be used on the triples
       //See https://json-ld.org/spec/latest/json-ld-framing/
       return fetcher.frame(response.triples, {'@graph':{}});
@@ -70,7 +70,7 @@ A small example fetching the next page of a paged collection and returning the u
 ```javascript
   let ldfetch = require('../lib/ldfetch.js');
   try {
-    let url = 'https://graph.irail.be/sncb/connections/';
+    let url = 'https://staging.api.irail.be/graph/';
     let fetch = new ldfetch({}); //options: allow to add more headers if needed
     let response = await fetch.get(url); 
     for (let i = 0; i < response.triples.length; i ++) {
