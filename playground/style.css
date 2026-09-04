@@ -1,0 +1,468 @@
+/* Palette and type lifted from pietercolpaert.be so the playground reads
+   as part of the same family. */
+:root {
+  --primary: #3b6790;
+  --primary-light: #8cadcc;
+  --accent: #ffb347;
+  --text: #313231;
+  --bg: #f9f9f9;
+  --font-body: 'Open Sans', sans-serif;
+  --font-mono: 'Ubuntu Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+}
+
+a {
+  color: var(--primary);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+/* ----------------------------
+   Header
+----------------------------- */
+.site-header.post-header {
+  background: linear-gradient(135deg, #345c83 0%, #3b6790 50%, #2f5377 100%);
+  color: white;
+  padding: 2.5rem 1.5rem 2rem;
+  text-align: center;
+}
+
+.site-header.post-header .intro {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.site-header.post-header h1 {
+  font-size: 2.4rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.site-header.post-header h3 {
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 0.6rem 0 1.2rem;
+}
+
+.site-header.post-header p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.site-header.post-header a {
+  color: #fff;
+}
+
+.site-header.post-header a:hover {
+  color: var(--accent);
+}
+
+/* ----------------------------
+   Full-width address bar, like a browser/search toolbar
+----------------------------- */
+.url-bar-band {
+  width: 100%;
+  background: #eef4fb;
+  border-bottom: 1px solid #d6deea;
+  padding: 1rem 1.5rem;
+}
+
+.url-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #bfcce0;
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(59, 103, 144, 0.12);
+  padding: 0.35rem 0.35rem 0.35rem 1.25rem;
+}
+
+.url-bar:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 2px 14px rgba(59, 103, 144, 0.22);
+}
+
+.url-bar-icon {
+  font-size: 1.1rem;
+  opacity: 0.6;
+}
+
+.url-bar input[type="url"] {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0.6rem 0.25rem;
+  font: inherit;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.url-bar button {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 0.6rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.url-bar button:hover {
+  background: #345c83;
+}
+
+.advanced {
+  max-width: 1100px;
+  margin: 0.65rem auto 0;
+}
+
+.advanced > summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.advanced-options {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding: 0.8rem 0.25rem 0;
+}
+
+.format-field {
+  flex: 0 0 12rem;
+}
+
+.format-field select {
+  width: 100%;
+  border: 1px solid #bfcce0;
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+}
+
+.frame-options {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ----------------------------
+   Headings, in the site's small-caps style
+----------------------------- */
+h2, h3 {
+  font-weight: 700;
+  text-transform: lowercase;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  margin-top: 0;
+  color: var(--primary);
+}
+
+.panel h2::before {
+  content: "» ";
+  color: var(--primary);
+}
+
+/* ----------------------------
+   Layout
+----------------------------- */
+.layout {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 3rem;
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: 1fr;
+}
+
+.panel {
+  border: 1px solid #e7e7e7;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.panel h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+.hint {
+  font-family: var(--font-body);
+  font-variant: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: normal;
+  color: #666;
+  font-size: 0.8em;
+}
+
+.field {
+  margin-bottom: 1rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.checkbox-field label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.copy-btn {
+  border: 1px solid #c6d3e3;
+  background: #f9fbfd;
+  color: var(--text);
+  padding: 0.25rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.copy-btn:hover {
+  background: #ecf2f9;
+  border-color: var(--primary-light);
+}
+
+#status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #666;
+  min-height: 1.3em;
+}
+
+#status.error { color: #b3452e; font-weight: 600; }
+
+#prefixes-field {
+  width: 100%;
+}
+
+#prefixes-field summary {
+  cursor: pointer;
+  font-weight: 700;
+  text-transform: lowercase;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  font-size: 1rem;
+}
+
+#prefix-count {
+  font-variant: normal;
+  text-transform: none;
+  color: #666;
+  font-family: var(--font-body);
+  font-weight: normal;
+}
+
+#prefixes-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+#prefixes-list li {
+  padding: 0.15rem 0;
+  color: #666;
+  word-break: break-all;
+}
+
+#prefixes-list code {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.editor {
+  border: 1px solid #e7e7e7;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.editor::after {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.output-editor .CodeMirror {
+  height: 22rem;
+}
+
+#frame-editor .CodeMirror {
+  height: 10rem;
+}
+
+@media (max-width: 650px) {
+  .advanced-options {
+    display: block;
+  }
+
+  .format-field {
+    max-width: none;
+  }
+}
+
+.CodeMirror {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.snippet { margin-bottom: 1.25rem; }
+.snippet:last-child { margin-bottom: 0; }
+
+.snippet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.snippet-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.snippet pre {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  background: #fafafa;
+  border: 1px solid #e7e7e7;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+footer {
+  font-size: 0.85rem;
+  color: #666;
+  padding: 2rem 0;
+  text-align: center;
+  background: white;
+  border-top: 1px solid #ddd;
+}
+
+/* ----------------------------
+   CodeMirror theme, matching the Rouge "site palette" theme used for
+   Turtle code blocks on pietercolpaert.be
+----------------------------- */
+.cm-s-pietercolpaert.CodeMirror {
+  background: #ffffff;
+  color: var(--text);
+}
+
+.cm-s-pietercolpaert .CodeMirror-gutters {
+  background: #fafafa;
+  border-right: 1px solid #eee;
+}
+
+.cm-s-pietercolpaert .CodeMirror-linenumber {
+  color: #999;
+}
+
+.cm-s-pietercolpaert .CodeMirror-cursor {
+  border-left: 1px solid var(--text);
+}
+
+.cm-s-pietercolpaert .CodeMirror-selected {
+  background: rgba(140, 173, 204, 0.25);
+}
+
+/* Comments -- and, in this Turtle mode, capitalised local names too */
+.cm-s-pietercolpaert .cm-comment {
+  color: #8a8f99;
+  font-style: italic;
+}
+
+/* @prefix / @base / a */
+.cm-s-pietercolpaert .cm-meta {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* lowercase local names (predicates) */
+.cm-s-pietercolpaert .cm-keyword {
+  color: var(--primary);
+}
+
+/* string and numeric literals */
+.cm-s-pietercolpaert .cm-string,
+.cm-s-pietercolpaert .cm-string-2,
+.cm-s-pietercolpaert .cm-number {
+  color: #b7791f;
+}
+
+/* full IRIs */
+.cm-s-pietercolpaert .cm-atom {
+  color: #276749;
+}
+
+/* namespace prefix (before the colon) */
+.cm-s-pietercolpaert .cm-variable-3 {
+  color: #276749;
+  font-weight: 600;
+}
+
+/* colon between prefix and local name */
+.cm-s-pietercolpaert .cm-operator {
+  color: #4a4a4a;
+}
+
+/* JSON mode, used by the output editor when JSON-LD is selected */
+.cm-s-pietercolpaert .cm-property {
+  color: var(--primary);
+}
+
+.cm-s-pietercolpaert .cm-def {
+  color: var(--primary);
+}

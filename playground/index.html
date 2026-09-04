@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ldfetch playground</title>
+<meta name="description" content="Fetch and stream Linked Data straight in your browser with ldfetch.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400;0,700;1,400&family=Ubuntu+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<header class="site-header post-header">
+  <div class="intro">
+    <h1>ldfetch playground</h1>
+  </div>
+</header>
+
+<div class="url-bar-band">
+  <form id="url-form" class="url-bar" role="search" aria-label="Fetch a Linked Data document">
+    <span class="url-bar-icon" aria-hidden="true">&#128279;</span>
+    <input id="url" type="url" spellcheck="false" autocomplete="off"
+           placeholder="https://example.org/your-data"
+           value="https://www.wikidata.org/wiki/Special:EntityData/Q57.ttl">
+    <button id="fetch-btn" type="submit">Fetch</button>
+  </form>
+
+  <details id="advanced" class="advanced">
+    <summary>Advanced</summary>
+    <div class="advanced-options">
+      <div class="field format-field">
+        <label for="output-format">Output format</label>
+        <select id="output-format">
+          <option value="trig">TriG</option>
+          <option value="nquads">N-Quads</option>
+          <option value="jsonld">JSON-LD</option>
+        </select>
+      </div>
+
+      <div id="frame-options" class="frame-options" hidden>
+        <div class="field checkbox-field">
+          <label>
+            <input id="frame-toggle" type="checkbox">
+            Apply a custom JSON-LD frame
+          </label>
+        </div>
+
+        <div class="field" id="frame-field" hidden>
+          <label for="frame-editor">JSON-LD frame</label>
+          <div id="frame-editor" class="editor"></div>
+        </div>
+      </div>
+    </div>
+  </details>
+</div>
+
+<main class="layout">
+  <p id="status" role="status" aria-live="polite">Ready.</p>
+
+  <section class="panel output" id="output-panel" aria-label="TriG output">
+    <h2><span id="output-title">trig output</span></h2>
+    <div id="output-editor" class="editor output-editor"></div>
+  </section>
+
+  <details class="panel prefixes" id="prefixes-field">
+    <summary>» prefixes used <span id="prefix-count"></span></summary>
+    <ul id="prefixes-list"></ul>
+  </details>
+
+  <section class="panel snippets" aria-label="Reuse this fetch">
+    <h2>use this fetch in your own project</h2>
+
+    <div class="snippet">
+      <div class="snippet-header">
+        <h3>node.js / browser (javascript)</h3>
+        <button type="button" class="copy-btn" data-target="code-js">Copy</button>
+      </div>
+      <pre><code id="code-js"></code></pre>
+    </div>
+
+    <div class="snippet">
+      <div class="snippet-header">
+        <h3>command line, no install needed</h3>
+        <button type="button" class="copy-btn" data-target="code-cli">Copy</button>
+      </div>
+      <pre><code id="code-cli"></code></pre>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/pietercolpaert/ldfetch">ldfetch on GitHub</a> ·
+    <a href="https://www.npmjs.com/package/ldfetch">ldfetch on npm</a> ·
+    <a href="https://www.pieter.pm/">pieter.pm</a>
+  </p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/turtle/turtle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.js"></script>
+<script src="./main.js"></script>
+<script src="./playground.js"></script>
+</body>
+</html>

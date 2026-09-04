@@ -9,7 +9,10 @@
   "main": "lib/ldfetch.js",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "build": "node build/build.js"
+    "build": "node build/build.js",
+    "build:playground": "node build/build-playground.js",
+    "build:site": "npm run build && npm run build:playground && node build/assemble-site.js",
+    "serve:playground": "npm run build:site && npx --yes http-server _site -c-1 -o"
   },
   "engines": {
     "node": ">=18"

@@ -67,6 +67,29 @@ test('ldfetch fetches RDF, parses triples and emits lifecycle events', async () 
   }
 });
 
+test('ldfetch emits a quad event per parsed triple and picks up document-declared prefixes', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle; charset=utf-8' });
+    res.end('@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n<#me> foaf:name "Alice" ; foaf:age "30" .');
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    fetcher.addPrefix('hydra', 'http://www.w3.org/ns/hydra/core#');
+    const quads = [];
+    fetcher.on('quad', quad => quads.push(quad));
+
+    const response = await fetcher.get(`${baseUrl}/profile`);
+
+    assert.equal(quads.length, 2);
+    assert.deepEqual(quads, response.triples);
+    assert.equal(response.prefixes.foaf, 'http://xmlns.com/foaf/0.1/');
+    assert.equal(response.prefixes.hydra, 'http://www.w3.org/ns/hydra/core#');
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('ldfetch reports the final URL and emits redirect events after HTTP redirects', async () => {
   const { server, baseUrl } = await createServer((req, res) => {
     if (req.url === '/from') {

@@ -16,7 +16,9 @@ Supports these features over standard `fetch`:
  * Uses [rdf-parse](https://github.com/rubensworks/rdf-parse.js) by Ruben Taelman to parse a wide variety of RDF serializations
  * Returns the Triples/Quads containing the data in the [RDFJS triple representation](http://rdf.js.org/)
  * Returns the URL of the document after redirects
- * Emits events for: `request`, `response`, `redirect`, `cache-hit`, `cache-miss` and `parsed`
+ * Emits events for: `request`, `response`, `redirect`, `cache-hit`, `cache-miss`, `quad`, `prefix` and `parsed` -- `quad` fires per parsed triple, so you can consume results as they stream in instead of waiting for the whole document
+
+Try it live in the [playground](https://www.pieter.pm/ldfetch/), which fetches and streams any Linked Data document straight in your browser, with optional JSON-LD framing.
 
 Features for the NodeJS framework in specific:
  * Automatically follows redirects
