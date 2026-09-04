@@ -90,6 +90,29 @@ test('ldfetch emits a quad event per parsed triple and picks up document-declare
   }
 });
 
+test('ldfetch groups an RDF Message Log fetch into response.messages and emits message events', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle; charset=utf-8' });
+    res.end('@version "1.2-messages" .\n<#s> <https://schema.org/name> "first" .\nMESSAGE\n<#s> <https://schema.org/name> "second" .');
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    const messageEvents = [];
+    fetcher.on('message', quadsInMessage => messageEvents.push(quadsInMessage));
+
+    const response = await fetcher.get(`${baseUrl}/log`);
+
+    assert.equal(response.triples.length, 2);
+    assert.equal(response.messages.length, 2);
+    assert.equal(response.messages[0][0].object.value, 'first');
+    assert.equal(response.messages[1][0].object.value, 'second');
+    assert.equal(messageEvents.length, 2);
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('ldfetch reports the final URL and emits redirect events after HTTP redirects', async () => {
   const { server, baseUrl } = await createServer((req, res) => {
     if (req.url === '/from') {
@@ -117,6 +140,32 @@ test('ldfetch reports the final URL and emits redirect events after HTTP redirec
       to: `${baseUrl}/to`
     });
     assert.equal(response.triples[0].subject.value, `${baseUrl}/to#resource`);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('ldfetch fetches binary Jelly-RDF over real HTTP', async () => {
+  const { DataFactory, Writer } = require('rdfjs-jelly');
+  const { namedNode, literal, quad } = DataFactory;
+  const jellyBytes = await new Promise((resolve, reject) => {
+    const writer = new Writer({ namespaces: { ex: 'https://example.org/' } });
+    writer.addQuad(quad(namedNode('https://example.org/s'), namedNode('https://example.org/p'), literal('binary over the wire')));
+    writer.end((error, output) => error ? reject(error) : resolve(output));
+  });
+
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/x-jelly-rdf' });
+    res.end(jellyBytes);
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    const response = await fetcher.get(`${baseUrl}/data.jelly`);
+
+    assert.equal(response.triples.length, 1);
+    assert.equal(response.triples[0].object.value, 'binary over the wire');
+    assert.equal(response.prefixes.ex, 'https://example.org/');
   } finally {
     await closeServer(server);
   }
