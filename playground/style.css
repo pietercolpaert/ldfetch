@@ -136,6 +136,50 @@ a:hover {
   background: #345c83;
 }
 
+.examples-row {
+  max-width: 1100px;
+  margin: 0.75rem auto 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.examples-label {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  color: #52606f;
+}
+
+.examples-list {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+}
+
+.example-chip {
+  flex-shrink: 0;
+  border: 1px solid #bfcce0;
+  background: #ffffff;
+  color: var(--primary);
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.example-chip:hover {
+  background: #eef4fb;
+  border-color: var(--primary);
+}
+
+.example-chip.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
 .advanced {
   max-width: 1100px;
   margin: 0.65rem auto 0;

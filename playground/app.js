@@ -1,6 +1,7 @@
 'use strict';
 
 var rdfWriter = require('rdf-writer-ts');
+var rdfParserTs = require('rdf-parser-ts');
 
 // Register common vocabularies up front so pretty RDF output can use compact
 // names. Prefixes declared by the fetched document are added to the list shown
@@ -51,6 +52,54 @@ var OUTPUT_FORMATS = {
   }
 };
 
+// query.wikidata.org's CONSTRUCT endpoint, returning a small sample of
+// software engineers as a real SPARQL CONSTRUCT result.
+var WIKIDATA_SPARQL_CONSTRUCT_QUERY = [
+  'CONSTRUCT { ?person wdt:P31 wd:Q5 . ?person rdfs:label ?label }',
+  'WHERE {',
+  '  ?person wdt:P106 wd:Q82594 ;',
+  '          rdfs:label ?label .',
+  '  FILTER(LANG(?label) = "en")',
+  '}',
+  'LIMIT 20'
+].join('\n');
+
+var EXAMPLES = {
+  wikidata: {
+    url: 'https://www.wikidata.org/wiki/Special:EntityData/Q57.ttl'
+  },
+  'wikidata-sparql': {
+    url: 'https://query.wikidata.org/sparql?query=' + encodeURIComponent(WIKIDATA_SPARQL_CONSTRUCT_QUERY)
+  },
+  profile: {
+    url: 'https://pietercolpaert.be/'
+  },
+  jelly: {
+    url: 'https://raw.githubusercontent.com/pietercolpaert/rdfjs-jelly/main/example/osm-dk-10k.jelly.gz'
+  },
+  'rdf-messages': {
+    // ldfetch expects absolute http(s) URLs, so resolve this against the
+    // page's own location rather than using a bare relative path.
+    url: new URL('examples/sensor-readings.trig', document.baseURI).href
+  },
+  // Too large (multi-GB) to ever fully buffer, and the S3 endpoint's CORS
+  // preflight rejects a Range header, so this one is handled by a separate,
+  // manual streaming path (see startStreamingExample) rather than a normal
+  // fetcher.get() call: one long-lived GET, paused every WINDOW_SIZE
+  // messages by simply not reading further, resumed on "Load next 100".
+  'rdf-messages-large': {
+    url: 'https://ugent-lib-opendata-prd.s3.ugent.be/alma-rdf/rdf-messages.20260404.nt',
+    streaming: true
+  },
+  // Avoids shaclcjs's list-compiling code path (property paths with "|",
+  // for example), which throws in a strict-mode bundle: shaclc-parse@2.0.0
+  // assigns to an undeclared `head` variable there, relying on sloppy-mode
+  // global auto-creation that only silently works in a non-strict context.
+  shaclc: {
+    url: 'https://raw.githubusercontent.com/jeswr/shaclcjs/main/__tests__/valid/basic-shape-with-targets.shaclc'
+  }
+};
+
 document.addEventListener('DOMContentLoaded', function () {
   var urlForm = document.getElementById('url-form');
   var urlInput = document.getElementById('url');
@@ -91,6 +140,17 @@ document.addEventListener('DOMContentLoaded', function () {
   var pendingMessages = [];
   var windowStartIndex = 0;
   var fetchComplete = false;
+
+  // Manual streaming session state for the one example too large to ever
+  // fully buffer (see startStreamingExample). streamingReader is non-null
+  // exactly while there's a live, not-yet-exhausted response stream to
+  // resume from.
+  var streamingReader = null;
+  var streamingParser = null;
+  var streamingDecoder = null;
+  var streamingDone = false;
+  var streamingBuilding = [];
+  var streamingCounter = null;
 
   var outputCm = CodeMirror(document.getElementById('output-editor'), {
     mode: 'text/turtle',
@@ -247,13 +307,32 @@ document.addEventListener('DOMContentLoaded', function () {
     var knownSoFar = windowStartIndex + currentMessages.length;
     // A trailing "+" signals there may be more beyond what's been seen so
     // far -- either buffered ahead already, or the fetch is still running.
-    var maybeMore = pendingMessages.length > 0 || !fetchComplete;
+    var maybeMore = pendingMessages.length > 0 || !fetchComplete || !!streamingReader;
     messagePosition.textContent = 'message ' + globalPosition + ' of ' + knownSoFar + (maybeMore ? '+' : '');
     messageCm.setValue(serializeMessage(currentMessages[index]));
   }
 
   function updateLoadMoreVisibility () {
-    loadMoreMessagesBtn.hidden = pendingMessages.length === 0;
+    // In streaming mode, the next window hasn't been fetched yet at all
+    // (that only happens once "Load next" is clicked), so pendingMessages
+    // being empty doesn't mean there's nothing left -- streamingReader
+    // being live does.
+    loadMoreMessagesBtn.hidden = pendingMessages.length === 0 && !streamingReader;
+  }
+
+  // Cancels and clears any in-progress manual streaming session (see
+  // startStreamingExample), so switching to a different fetch doesn't leave
+  // a paused connection quietly sitting open in the background.
+  function resetStreamingSession () {
+    if (streamingReader) {
+      try { streamingReader.cancel(); } catch (cancelError) { /* already closed */ }
+    }
+    streamingReader = null;
+    streamingParser = null;
+    streamingDecoder = null;
+    streamingDone = false;
+    streamingBuilding = [];
+    streamingCounter = null;
   }
 
   // Resets all message-window state for a new fetch.
@@ -264,6 +343,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetchComplete = false;
     messagesPanel.hidden = true;
     loadMoreMessagesBtn.hidden = true;
+    resetStreamingSession();
   }
 
   // Called for every message as it streams in via the 'message' event. The
@@ -297,6 +377,122 @@ document.addEventListener('DOMContentLoaded', function () {
     if (currentMessages.length) renderMessage(parseInt(messageSlider.value, 10));
   }
 
+  // Feeds one parsed item (a plain quad or, in RDF Messages mode, a
+  // {quad, messageCounter} pair) into the in-progress message being built up
+  // across chunk boundaries, flushing it via receiveMessage() whenever the
+  // counter changes. Unlike the ordinary fetch path (which groups messages
+  // with rdf-parser-ts's toMessages() once the whole document is in hand,
+  // so it can preserve entirely-empty messages), this infers boundaries
+  // purely from messageCounter transitions as chunks arrive -- the only
+  // option when the source may never be fully read. The trade-off: a
+  // message with zero quads that lands exactly on a chunk boundary has
+  // nothing to signal it, and would be missed. Acceptable for a multi-GB
+  // real-world log of non-empty library records; worth knowing about for
+  // other sources.
+  function handleStreamingItem (item) {
+    if (!(item && item.quad && typeof item.messageCounter === 'number')) return;
+    if (streamingCounter === null) {
+      streamingCounter = item.messageCounter;
+    } else if (item.messageCounter !== streamingCounter) {
+      receiveMessage(streamingBuilding);
+      streamingBuilding = [];
+      streamingCounter = item.messageCounter;
+    }
+    streamingBuilding.push(item.quad);
+  }
+
+  // Reads and parses chunks from the paused response stream -- true
+  // backpressure, no Range header and no repeated requests, just one
+  // long-lived GET whose body we stop reading from once there's enough,
+  // and resume later -- until WINDOW_SIZE more messages have arrived (or
+  // the stream ends), then stops (pauses) again.
+  function pumpStreamingMessages () {
+    var targetCount = windowStartIndex + currentMessages.length + pendingMessages.length + WINDOW_SIZE;
+
+    function step () {
+      if (windowStartIndex + currentMessages.length + pendingMessages.length >= targetCount) {
+        return Promise.resolve();
+      }
+      if (!streamingReader) return Promise.resolve();
+      return streamingReader.read().then(function (result) {
+        if (result.done) {
+          var tailText = streamingDecoder.decode();
+          if (tailText) streamingParser.write(tailText).forEach(handleStreamingItem);
+          streamingParser.end().forEach(handleStreamingItem);
+          if (streamingBuilding.length) {
+            receiveMessage(streamingBuilding);
+            streamingBuilding = [];
+          }
+          streamingDone = true;
+          streamingReader = null;
+          return;
+        }
+        streamingParser.write(streamingDecoder.decode(result.value, { stream: true })).forEach(handleStreamingItem);
+        return step();
+      });
+    }
+
+    return step();
+  }
+
+  function continueStreaming () {
+    setStatus('Fetching … (streaming, will pause again after ' + WINDOW_SIZE + ' more messages)');
+    return pumpStreamingMessages().then(function () {
+      fetchComplete = streamingDone;
+      updateLoadMoreVisibility();
+      if (currentMessages.length) renderMessage(parseInt(messageSlider.value, 10));
+      var total = windowStartIndex + currentMessages.length + pendingMessages.length;
+      if (streamingDone) {
+        setStatus('Done: reached the end of the stream, ' + total + ' messages total.');
+      } else {
+        // A single network chunk can hold more than WINDOW_SIZE messages,
+        // and a chunk can't be consumed partway through, so "buffered so
+        // far" can overshoot the round WINDOW_SIZE step -- the window
+        // shown on screen stays capped at WINDOW_SIZE regardless.
+        setStatus('Paused: ' + total + ' messages fetched so far (' + WINDOW_SIZE + ' shown at a time) -- click "Load next 100" to keep streaming.');
+      }
+      fetchBtn.disabled = false;
+    }).catch(function (error) {
+      setStatus('Error: ' + (error && error.message ? error.message : error), true);
+      fetchBtn.disabled = false;
+    });
+  }
+
+  // Entry point for the one example too large to fetch normally: raw
+  // fetch() (a plain GET, so no CORS-preflight-triggering headers), parsed
+  // incrementally with rdf-parser-ts's IncrementalParser as chunks arrive,
+  // rather than lib/ldfetch.js's usual buffer-the-whole-response approach.
+  function startStreamingExample (url) {
+    resetMessages();
+    outputPanel.hidden = true;
+    renderPrefixes({});
+    setStatus('Connecting …');
+    fetchBtn.disabled = true;
+
+    fetch(url).then(function (response) {
+      if (!response.ok) throw new Error('Request failed: HTTP ' + response.status);
+      streamingReader = response.body.getReader();
+      streamingDecoder = new TextDecoder('utf-8');
+      var seenPrefixes = Object.assign({}, COMMON_PREFIXES);
+      renderPrefixes(seenPrefixes);
+      streamingParser = new rdfParserTs.IncrementalParser({ baseIRI: url, format: 'text/turtle' }, {
+        prefix: function (prefix, iri) {
+          var value = (iri && iri.value !== undefined) ? iri.value : iri;
+          if (!(prefix in seenPrefixes)) {
+            seenPrefixes[prefix] = value;
+            renderPrefixes(seenPrefixes);
+          }
+        }
+      });
+      codeJsEl.textContent = streamingJsSnippet(url);
+      codeCliEl.textContent = cliSnippet(url, null);
+      return continueStreaming();
+    }).catch(function (error) {
+      setStatus('Error: ' + (error && error.message ? error.message : error), true);
+      fetchBtn.disabled = false;
+    });
+  }
+
   messageSlider.addEventListener('input', function () {
     renderMessage(parseInt(messageSlider.value, 10));
   });
@@ -308,6 +504,12 @@ document.addEventListener('DOMContentLoaded', function () {
     renderMessage(0);
     messageCm.refresh();
     updateLoadMoreVisibility();
+
+    if (streamingReader) {
+      fetchBtn.disabled = true;
+      loadMoreMessagesBtn.disabled = true;
+      continueStreaming().then(function () { loadMoreMessagesBtn.disabled = false; });
+    }
   });
 
   // Left/right steps through messages from anywhere on the page, as long as
@@ -362,6 +564,39 @@ document.addEventListener('DOMContentLoaded', function () {
       '  // response.triples is an array of RDF/JS quads',
       '  console.log(response.triples);',
       '});'
+    ].join('\n');
+  }
+
+  // Unlike every other example, this one isn't something `ldfetch.get()`
+  // does for you -- the file is too large to ever fully buffer, so this
+  // shows the actual technique: a plain fetch() (no Range header, so no
+  // CORS preflight to worry about), parsed incrementally, with the reader
+  // simply not asked to read further once you have enough -- backpressure,
+  // not cancellation. On Node, replace response.body with a
+  // fs.createReadStream()/http response and iterate its chunks the same way.
+  function streamingJsSnippet(url) {
+    return [
+      "const { IncrementalParser, isMessageQuad } = require('rdf-parser-ts');",
+      '',
+      "const response = await fetch('" + url + "');",
+      'const reader = response.body.getReader();',
+      "const decoder = new TextDecoder('utf-8');",
+      "const parser = new IncrementalParser({ baseIRI: '" + url + "', format: 'text/turtle' });",
+      '',
+      '// Stop calling reader.read() once you have enough -- the connection just',
+      '// sits there, paused, until you call it again for more. Each read() can',
+      "// contain several messages at once (a chunk can't be consumed partway",
+      '// through), so track the highest messageCounter seen rather than',
+      "// counting items -- that's how many *complete* messages you have.",
+      'let highestMessageCounter = -1;',
+      'while (highestMessageCounter < 99) {',
+      '  const { done, value } = await reader.read();',
+      '  if (done) break;',
+      '  for (const item of parser.write(decoder.decode(value, { stream: true }))) {',
+      '    if (isMessageQuad(item)) highestMessageCounter = Math.max(highestMessageCounter, item.messageCounter);',
+      '  }',
+      '}',
+      '// reader is now paused; call reader.read() again whenever you want more.'
     ].join('\n');
   }
 
@@ -424,12 +659,30 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var quadCount = 0;
+    // Jelly-RDF's 'message' event fires before the individual quads it
+    // contains reach 'quad' (verified: message, then its quads). Once we
+    // know a source is message-framed, the flat output panel gets hidden
+    // anyway ("when messages, only have the messages output"), so feeding
+    // it quad-by-quad is wasted work -- and for a source with hundreds of
+    // thousands of quads, that waste alone is enough to hang the tab. Stop
+    // as soon as we see the first message.
+    var messageModeDetected = false;
     fetcher.on('quad', function (quad) {
+      if (messageModeDetected) return;
       quadCount++;
       if (writer) writer.addQuad(quad);
       setStatus('Fetching … ' + quadCount + ' triple' + (quadCount === 1 ? '' : 's') + ' so far');
     });
-    fetcher.on('message', receiveMessage);
+    fetcher.on('message', function (quadsInMessage) {
+      if (!messageModeDetected) {
+        messageModeDetected = true;
+        outputCm.setValue('');
+      }
+      quadCount += quadsInMessage.length;
+      receiveMessage(quadsInMessage);
+      var total = windowStartIndex + currentMessages.length + pendingMessages.length;
+      setStatus('Fetching … ' + quadCount + ' triple' + (quadCount === 1 ? '' : 's') + ' in ' + total + ' message' + (total === 1 ? '' : 's') + ' so far');
+    });
 
     fetcher.get(url).then(function (response) {
       if (writer) writer.end();
@@ -475,6 +728,26 @@ document.addEventListener('DOMContentLoaded', function () {
   urlForm.addEventListener('submit', function (event) {
     event.preventDefault();
     runFetch();
+  });
+
+  document.getElementById('examples-list').addEventListener('click', function (event) {
+    var btn = event.target.closest('.example-chip');
+    if (!btn) return;
+    var example = EXAMPLES[btn.dataset.example];
+    if (!example) return;
+
+    document.querySelectorAll('.example-chip').forEach(function (chip) {
+      chip.classList.toggle('active', chip === btn);
+    });
+
+    urlInput.value = example.url;
+    updateHash();
+
+    if (example.streaming) {
+      startStreamingExample(example.url);
+    } else {
+      runFetch();
+    }
   });
 
   window.addEventListener('hashchange', function () {

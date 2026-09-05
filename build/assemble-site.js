@@ -24,4 +24,11 @@ for (const [from, to] of files) {
   fs.copyFileSync(path.join(root, from), path.join(siteDir, to));
 }
 
+const examplesSrc = path.join(root, 'playground', 'examples');
+const examplesDest = path.join(siteDir, 'examples');
+fs.mkdirSync(examplesDest, { recursive: true });
+for (const name of fs.readdirSync(examplesSrc)) {
+  fs.copyFileSync(path.join(examplesSrc, name), path.join(examplesDest, name));
+}
+
 console.log('Assembled site in ' + siteDir);
