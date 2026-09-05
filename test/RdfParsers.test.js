@@ -215,9 +215,16 @@ test('RdfParsers transparently decompresses a gzip-compressed Turtle file', asyn
 });
 
 test('RdfParsers transparently decompresses a zstd-compressed Turtle file', async () => {
+  // Compress with the same WASM library RdfParsers.js uses to decompress
+  // (@hpcc-js/wasm-zstd), not zlib.zstdCompressSync -- that's Node's native
+  // zstd support, only available on much newer Node than this project
+  // targets (engines: >=18), and the whole point of the WASM library is to
+  // not need it.
+  const { Zstd } = require('@hpcc-js/wasm-zstd');
+  const zstd = await Zstd.load();
   const turtle = '@prefix ex: <https://example.org/> .\nex:s ex:p "from zstd" .';
   const { triples } = await collect({
-    bodyBuffer: zlib.zstdCompressSync(Buffer.from(turtle)),
+    bodyBuffer: Buffer.from(zstd.compress(new TextEncoder().encode(turtle))),
     contentType: 'application/octet-stream',
     baseIRI: 'https://example.org/data.ttl.zst'
   });
