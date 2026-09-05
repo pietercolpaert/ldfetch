@@ -71,8 +71,26 @@ document.addEventListener('DOMContentLoaded', function () {
   var messagesPanel = document.getElementById('messages-panel');
   var messageSlider = document.getElementById('message-slider');
   var messagePosition = document.getElementById('message-position');
+  var loadMoreMessagesBtn = document.getElementById('load-more-messages');
   var applyingHash = false;
+
+  // Very large RDF Message logs shouldn't have to sit fully in memory just
+  // to be browsed: messages are consumed from the live 'message' event (not
+  // response.messages) into a window of at most WINDOW_SIZE, plus a small
+  // lookahead buffer of whatever streams in past that. "Load next" swaps in
+  // the next window and drops the old one and everything before it, so at
+  // most ~2 windows' worth of messages are ever referenced at once -- for
+  // Jelly-RDF, which streams messages progressively as it parses, that's a
+  // real memory bound. rdf-parser-ts's Turtle/TriG "-messages" mode can only
+  // report message boundaries (including empty ones) once the whole
+  // document has been parsed, so for that format family this still bounds
+  // what the playground itself renders/retains, but not what the parser
+  // buffers internally while it runs.
+  var WINDOW_SIZE = 100;
   var currentMessages = [];
+  var pendingMessages = [];
+  var windowStartIndex = 0;
+  var fetchComplete = false;
 
   var outputCm = CodeMirror(document.getElementById('output-editor'), {
     mode: 'text/turtle',
@@ -225,27 +243,71 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!currentMessages.length) return;
     index = Math.max(0, Math.min(index, currentMessages.length - 1));
     messageSlider.value = String(index);
-    messagePosition.textContent = 'message ' + (index + 1) + ' of ' + currentMessages.length;
+    var globalPosition = windowStartIndex + index + 1;
+    var knownSoFar = windowStartIndex + currentMessages.length;
+    // A trailing "+" signals there may be more beyond what's been seen so
+    // far -- either buffered ahead already, or the fetch is still running.
+    var maybeMore = pendingMessages.length > 0 || !fetchComplete;
+    messagePosition.textContent = 'message ' + globalPosition + ' of ' + knownSoFar + (maybeMore ? '+' : '');
     messageCm.setValue(serializeMessage(currentMessages[index]));
   }
 
-  // Only formats/documents with real RDF Message framing (e.g. Turtle/TriG
-  // "-messages" versions, or Jelly-RDF, which is inherently message-framed)
-  // ever populate response.messages; everything else hides this panel.
-  function showMessages (messages) {
-    currentMessages = messages || [];
-    if (!currentMessages.length) {
-      messagesPanel.hidden = true;
-      return;
+  function updateLoadMoreVisibility () {
+    loadMoreMessagesBtn.hidden = pendingMessages.length === 0;
+  }
+
+  // Resets all message-window state for a new fetch.
+  function resetMessages () {
+    currentMessages = [];
+    pendingMessages = [];
+    windowStartIndex = 0;
+    fetchComplete = false;
+    messagesPanel.hidden = true;
+    loadMoreMessagesBtn.hidden = true;
+  }
+
+  // Called for every message as it streams in via the 'message' event. The
+  // first WINDOW_SIZE fill the visible window directly (so, for formats
+  // that genuinely stream messages, the panel populates progressively);
+  // anything past that buffers in pendingMessages until "Load next" is
+  // clicked, so the browser never has to hold more than about two windows'
+  // worth of messages for the picture on screen.
+  function receiveMessage (quadsInMessage) {
+    if (currentMessages.length < WINDOW_SIZE) {
+      currentMessages.push(quadsInMessage);
+      messagesPanel.hidden = false;
+      messageSlider.max = String(currentMessages.length - 1);
+      if (currentMessages.length === 1) {
+        renderMessage(0);
+        messageCm.refresh();
+      } else {
+        renderMessage(parseInt(messageSlider.value, 10));
+      }
+    } else {
+      pendingMessages.push(quadsInMessage);
+      updateLoadMoreVisibility();
     }
-    messagesPanel.hidden = false;
-    messageSlider.max = String(currentMessages.length - 1);
-    renderMessage(0);
-    messageCm.refresh();
+  }
+
+  // Called once the fetch settles: nothing more will ever arrive, so drop
+  // the "+" uncertainty from the position label and finalize the button.
+  function finishMessages () {
+    fetchComplete = true;
+    updateLoadMoreVisibility();
+    if (currentMessages.length) renderMessage(parseInt(messageSlider.value, 10));
   }
 
   messageSlider.addEventListener('input', function () {
     renderMessage(parseInt(messageSlider.value, 10));
+  });
+
+  loadMoreMessagesBtn.addEventListener('click', function () {
+    windowStartIndex += currentMessages.length;
+    currentMessages = pendingMessages.splice(0, WINDOW_SIZE);
+    messageSlider.max = String(Math.max(0, currentMessages.length - 1));
+    renderMessage(0);
+    messageCm.refresh();
+    updateLoadMoreVisibility();
   });
 
   // Left/right steps through messages from anywhere on the page, as long as
@@ -343,7 +405,7 @@ document.addEventListener('DOMContentLoaded', function () {
     outputCm.setValue('');
     outputPanel.hidden = false;
     renderPrefixes({});
-    showMessages([]);
+    resetMessages();
     setStatus('Fetching …');
 
     var fetcher = new window.ldfetch();
@@ -367,21 +429,23 @@ document.addEventListener('DOMContentLoaded', function () {
       if (writer) writer.addQuad(quad);
       setStatus('Fetching … ' + quadCount + ' triple' + (quadCount === 1 ? '' : 's') + ' so far');
     });
+    fetcher.on('message', receiveMessage);
 
     fetcher.get(url).then(function (response) {
       if (writer) writer.end();
       renderPrefixes(response.prefixes);
+      finishMessages();
       // RDF Messages are a sequence of discrete messages, not one document --
       // when the source is message-framed, the slider below is the whole
       // story, so skip the flat merged/framed output entirely.
-      var hasMessages = !!(response.messages && response.messages.length);
-      showMessages(response.messages);
+      var hasMessages = currentMessages.length > 0;
       outputPanel.hidden = hasMessages;
       codeJsEl.textContent = jsSnippet(url, frame, hasMessages);
       codeCliEl.textContent = cliSnippet(url, frame);
 
       if (hasMessages) {
-        setStatus('Done: ' + response.triples.length + ' triples in ' + response.messages.length + ' messages from ' + response.url);
+        var messageTotal = windowStartIndex + currentMessages.length + pendingMessages.length;
+        setStatus('Done: ' + response.triples.length + ' triples in ' + messageTotal + ' messages from ' + response.url);
         fetchBtn.disabled = false;
         return;
       }

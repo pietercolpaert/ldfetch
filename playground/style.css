@@ -387,6 +387,22 @@ button {
   text-align: right;
 }
 
+#load-more-messages {
+  flex-shrink: 0;
+  border: 1px solid #c6d3e3;
+  background: #f9fbfd;
+  color: var(--text);
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+#load-more-messages:hover {
+  background: #ecf2f9;
+  border-color: var(--primary-light);
+}
+
 #frame-editor .CodeMirror {
   height: 10rem;
 }
