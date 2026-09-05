@@ -262,7 +262,24 @@ document.addEventListener('DOMContentLoaded', function () {
     renderMessage(parseInt(messageSlider.value, 10) + (event.key === 'ArrowRight' ? 1 : -1));
   });
 
-  function jsSnippet(url, frame) {
+  function jsSnippet(url, frame, hasMessages) {
+    if (hasMessages) {
+      return [
+        "const ldfetch = require('ldfetch');",
+        'const fetcher = new ldfetch();',
+        '',
+        "// This source uses RDF Message framing -- 'message' fires once per",
+        '// message as it streams in, with the quads belonging to it',
+        "fetcher.on('message', (quadsInMessage) => {",
+        '  console.log(quadsInMessage);',
+        '});',
+        '',
+        "fetcher.get('" + url + "').then(response => {",
+        '  // response.messages is also available once the fetch completes',
+        "  console.log(response.messages.length + ' messages in total');",
+        '});'
+      ].join('\n');
+    }
     if (frame) {
       return [
         "const ldfetch = require('ldfetch');",
@@ -324,6 +341,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     fetchBtn.disabled = true;
     outputCm.setValue('');
+    outputPanel.hidden = false;
     renderPrefixes({});
     showMessages([]);
     setStatus('Fetching …');
@@ -353,9 +371,20 @@ document.addEventListener('DOMContentLoaded', function () {
     fetcher.get(url).then(function (response) {
       if (writer) writer.end();
       renderPrefixes(response.prefixes);
+      // RDF Messages are a sequence of discrete messages, not one document --
+      // when the source is message-framed, the slider below is the whole
+      // story, so skip the flat merged/framed output entirely.
+      var hasMessages = !!(response.messages && response.messages.length);
       showMessages(response.messages);
-      codeJsEl.textContent = jsSnippet(url, frame);
+      outputPanel.hidden = hasMessages;
+      codeJsEl.textContent = jsSnippet(url, frame, hasMessages);
       codeCliEl.textContent = cliSnippet(url, frame);
+
+      if (hasMessages) {
+        setStatus('Done: ' + response.triples.length + ' triples in ' + response.messages.length + ' messages from ' + response.url);
+        fetchBtn.disabled = false;
+        return;
+      }
 
       if (formatName !== 'jsonld') {
         setStatus('Done: ' + response.triples.length + ' triples from ' + response.url);
