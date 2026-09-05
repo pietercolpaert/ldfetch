@@ -38,6 +38,16 @@ if (!process.argv[2]) {
 var history = [url];
 
 var url = process.argv[2];
+try {
+  var urlProtocol = new URL(url).protocol;
+  if (urlProtocol !== 'http:' && urlProtocol !== 'https:') {
+    console.error('Only http:// and https:// URLs are supported');
+    process.exit(1);
+  }
+} catch (e) {
+  console.error('Provide a valid http(s) URI please');
+  process.exit(1);
+}
 var writer = new rdfWriter.Writer(process.stdout, {end: false});
 var prefixesWritten = false;
 
