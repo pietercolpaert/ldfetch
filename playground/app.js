@@ -36,18 +36,18 @@ var OUTPUT_FORMATS = {
     label: 'TriG',
     writerFormat: 'TriG',
     mode: 'text/turtle',
-    hint: '(streams in as triples arrive; prefix declarations are listed below)'
+    hint: ''
   },
   nquads: {
     label: 'N-Quads',
     writerFormat: 'N-Quads',
     mode: 'text/turtle',
-    hint: '(streams in as quads arrive)'
+    hint: ''
   },
   jsonld: {
     label: 'JSON-LD',
     mode: { name: 'javascript', json: true },
-    hint: '(rendered after the document has been parsed)'
+    hint: ''
   }
 };
 
@@ -68,7 +68,11 @@ document.addEventListener('DOMContentLoaded', function () {
   var prefixCount = document.getElementById('prefix-count');
   var codeJsEl = document.getElementById('code-js');
   var codeCliEl = document.getElementById('code-cli');
+  var messagesPanel = document.getElementById('messages-panel');
+  var messageSlider = document.getElementById('message-slider');
+  var messagePosition = document.getElementById('message-position');
   var applyingHash = false;
+  var currentMessages = [];
 
   var outputCm = CodeMirror(document.getElementById('output-editor'), {
     mode: 'text/turtle',
@@ -84,6 +88,14 @@ document.addEventListener('DOMContentLoaded', function () {
     lineNumbers: true,
     lineWrapping: true,
     value: JSON.stringify(DEFAULT_FRAME, null, 2)
+  });
+
+  var messageCm = CodeMirror(document.getElementById('message-editor'), {
+    mode: 'text/turtle',
+    theme: 'pietercolpaert',
+    readOnly: true,
+    lineNumbers: true,
+    lineWrapping: true
   });
 
   function updateFormatUi() {
@@ -194,6 +206,62 @@ document.addEventListener('DOMContentLoaded', function () {
     prefixCount.textContent = names.length ? '(' + names.length + ')' : '';
   }
 
+  // Renders one RDF Message's quads as TriG, independent of the main output
+  // format -- messages are raw event/diff-style data, not documents, so
+  // JSON-LD framing doesn't apply here.
+  function serializeMessage (quads) {
+    var writer = new rdfWriter.Writer({ format: 'TriG', prefixes: COMMON_PREFIXES });
+    writer.addQuads(quads);
+    var output = '';
+    writer.end(function (error, result) { output = result; });
+    // Drop the repeated @prefix header (blank-line separated from the
+    // quads), matching the main output panel, which skips straight to
+    // content -- the prefixes are already listed in their own panel.
+    var separatorIndex = output.indexOf('\n\n');
+    return separatorIndex === -1 ? output : output.slice(separatorIndex + 2);
+  }
+
+  function renderMessage (index) {
+    if (!currentMessages.length) return;
+    index = Math.max(0, Math.min(index, currentMessages.length - 1));
+    messageSlider.value = String(index);
+    messagePosition.textContent = 'message ' + (index + 1) + ' of ' + currentMessages.length;
+    messageCm.setValue(serializeMessage(currentMessages[index]));
+  }
+
+  // Only formats/documents with real RDF Message framing (e.g. Turtle/TriG
+  // "-messages" versions, or Jelly-RDF, which is inherently message-framed)
+  // ever populate response.messages; everything else hides this panel.
+  function showMessages (messages) {
+    currentMessages = messages || [];
+    if (!currentMessages.length) {
+      messagesPanel.hidden = true;
+      return;
+    }
+    messagesPanel.hidden = false;
+    messageSlider.max = String(currentMessages.length - 1);
+    renderMessage(0);
+    messageCm.refresh();
+  }
+
+  messageSlider.addEventListener('input', function () {
+    renderMessage(parseInt(messageSlider.value, 10));
+  });
+
+  // Left/right steps through messages from anywhere on the page, as long as
+  // focus isn't in a text field (typing "->" in the URL bar shouldn't jump
+  // messages). Focus on the slider itself already gets native arrow-key
+  // support, which fires the same 'input' handler above.
+  document.addEventListener('keydown', function (event) {
+    if (messagesPanel.hidden) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    var target = event.target;
+    var tag = target && target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+    event.preventDefault();
+    renderMessage(parseInt(messageSlider.value, 10) + (event.key === 'ArrowRight' ? 1 : -1));
+  });
+
   function jsSnippet(url, frame) {
     if (frame) {
       return [
@@ -257,6 +325,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetchBtn.disabled = true;
     outputCm.setValue('');
     renderPrefixes({});
+    showMessages([]);
     setStatus('Fetching …');
 
     var fetcher = new window.ldfetch();
@@ -284,6 +353,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetcher.get(url).then(function (response) {
       if (writer) writer.end();
       renderPrefixes(response.prefixes);
+      showMessages(response.messages);
       codeJsEl.textContent = jsSnippet(url, frame);
       codeCliEl.textContent = cliSnippet(url, frame);
 

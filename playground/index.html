@@ -62,7 +62,7 @@
   <p id="status" role="status" aria-live="polite">Ready.</p>
 
   <section class="panel output" id="output-panel" aria-label="TriG output">
-    <h2><span id="output-title">trig output</span></h2>
+    <h2><span id="output-title">trig output</span> <span class="hint" id="output-hint"></span></h2>
     <div id="output-editor" class="editor output-editor"></div>
   </section>
 
@@ -70,6 +70,15 @@
     <summary>» prefixes used <span id="prefix-count"></span></summary>
     <ul id="prefixes-list"></ul>
   </details>
+
+  <section class="panel messages" id="messages-panel" hidden aria-label="RDF Messages">
+    <h2>messages <span class="hint">(use the slider, or &larr;/&rarr;, to step through them)</span></h2>
+    <div class="message-slider-row">
+      <input type="range" id="message-slider" min="0" max="0" value="0" step="1">
+      <span id="message-position"></span>
+    </div>
+    <div id="message-editor" class="editor output-editor"></div>
+  </section>
 
   <section class="panel snippets" aria-label="Reuse this fetch">
     <h2>use this fetch in your own project</h2>

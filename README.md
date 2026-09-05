@@ -13,10 +13,12 @@ In order to use it as a library, you can leave out the `-g`.
 
 Supports these features over standard `fetch`:
  * Sets an accept header for negotiating an RDF serialization
- * Uses [rdf-parse](https://github.com/rubensworks/rdf-parse.js) by Ruben Taelman to parse a wide variety of RDF serializations
+ * Parses a wide variety of RDF serializations, each through its own dedicated streaming parser: [rdf-parser-ts](https://github.com/pietercolpaert/rdf-parser.ts) (Turtle, TriG, N-Triples, N-Quads, RDF 1.2, RDF Message Logs) by Pieter Colpaert, [jsonld-streaming-parser](https://github.com/rubensworks/streaming-jsonld-parser.js), [rdfa-streaming-parser](https://github.com/rubensworks/rdfa-streaming-parser.js) and [microdata-rdf-streaming-parser](https://github.com/rubensworks/microdata-rdf-streaming-parser.js) (both used together for HTML), and [rdfxml-streaming-parser](https://github.com/rdfjs/rdfxml-streaming-parser.js), all by Ruben Taelman, [shaclc-parse](https://github.com/jeswr/shaclcjs) by Jesse Wright for SHACL Compact syntax, and [rdfjs-jelly](https://github.com/pietercolpaert/rdfjs-jelly) for the compact binary [Jelly-RDF](https://jelly-rdf.github.io/) format (requires Node.js >=24; lazily loaded, so older Node versions are unaffected unless you actually fetch Jelly-RDF content)
  * Returns the Triples/Quads containing the data in the [RDFJS triple representation](http://rdf.js.org/)
  * Returns the URL of the document after redirects
- * Emits events for: `request`, `response`, `redirect`, `cache-hit`, `cache-miss`, `quad`, `prefix` and `parsed` -- `quad` fires per parsed triple, so you can consume results as they stream in instead of waiting for the whole document
+ * Returns and streams any prefixes/namespaces declared by the source document (Turtle/TriG, SHACL Compact syntax, Jelly-RDF), in addition to any registered with `addPrefix`
+ * Groups RDF Message-framed sources (Turtle/TriG "-messages" versions, and Jelly-RDF, which is inherently message-framed) into `response.messages`, and emits a `message` event per message as it's parsed
+ * Emits events for: `request`, `response`, `redirect`, `cache-hit`, `cache-miss`, `quad`, `prefix`, `message` and `parsed` -- `quad` fires per parsed triple, so you can consume results as they stream in instead of waiting for the whole document
 
 Try it live in the [playground](https://www.pieter.pm/ldfetch/), which fetches and streams any Linked Data document straight in your browser, with optional JSON-LD framing.
 
@@ -96,9 +98,12 @@ The response object will look like this:
 {
   "responseCode": 200,
   "triples": [{},{},{}],
+  "prefixes": {"foaf": "http://xmlns.com/foaf/0.1/"},
+  "messages": [],
   "url": "https://{url after redirects}"
 }
 ```
+`prefixes` merges what you registered with `addPrefix` and whatever the source document declares itself. `messages` is only populated for RDF Message-framed sources (see Features above) -- each entry is the array of quads belonging to one message.
 
 ## License and copyright
 

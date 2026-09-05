@@ -39,6 +39,7 @@ var history = [url];
 
 var url = process.argv[2];
 var writer = new rdfWriter.Writer(process.stdout, {end: false});
+var prefixesWritten = false;
 
 var processPage = async function (pageUrl) {
   console.error('GET ' + pageUrl);
@@ -49,6 +50,13 @@ var processPage = async function (pageUrl) {
     console.error('' + response.statusCode + ' ' +response.url + ' (' + (endTime.getTime() - startTime.getTime()) + 'ms)');
     history.push(pageUrl);
     history.push(response.url);
+    //Prefixes discovered in the source (e.g. Turtle/TriG @prefix, SHACL-C's
+    //defaults, Jelly-RDF's namespace table, ...) are only known once the
+    //first response has been parsed, so declare them on the writer here
+    if (!prefixesWritten) {
+      prefixesWritten = true;
+      writer.addPrefixes(response.prefixes);
+    }
     if (response.triples) {
       if (options.frame) {
         let frame;

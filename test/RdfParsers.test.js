@@ -52,6 +52,23 @@ test('RdfParsers groups RDF Message Log entries into messages', async () => {
   assert.equal(messages[1][0].object.value, 'm2');
 });
 
+test('RdfParsers preserves a deliberately empty message between two delimiters', async () => {
+  const { triples, messages } = await collect({
+    bodyText: '@version "1.2-messages" .\n' +
+      '<https://example.org/s> <https://example.org/p> "m1" .\n' +
+      'MESSAGE\n' +
+      'MESSAGE\n' +
+      '<https://example.org/s> <https://example.org/p> "m3" .',
+    contentType: 'text/turtle',
+    baseIRI: 'https://example.org/'
+  });
+  assert.equal(triples.length, 2);
+  assert.equal(messages.length, 3);
+  assert.equal(messages[0][0].object.value, 'm1');
+  assert.equal(messages[1].length, 0);
+  assert.equal(messages[2][0].object.value, 'm3');
+});
+
 test('RdfParsers never reports messages for ordinary (non-message) Turtle', async () => {
   const { messages } = await collect({
     bodyText: '<https://example.org/s> <https://example.org/p> "plain" .',
@@ -136,4 +153,50 @@ test('RdfParsers rejects unsupported content types', async () => {
     collect({ bodyText: 'whatever', contentType: 'application/x-not-a-real-format' }),
     /Unsupported content type/
   );
+});
+
+test('RdfParsers falls back to a suffix-based guess for text/plain', async () => {
+  const { triples } = await collect({
+    bodyText: '@prefix ex: <https://example.org/> .\nex:s ex:p "guessed from .ttl" .',
+    contentType: 'text/plain',
+    baseIRI: 'https://example.org/data.ttl'
+  });
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].object.value, 'guessed from .ttl');
+});
+
+test('RdfParsers falls back to a suffix-based guess for application/octet-stream', async () => {
+  const { triples } = await collect({
+    bodyText: JSON.stringify({ '@id': 'https://example.org/s', 'https://example.org/p': 'guessed from .jsonld' }),
+    contentType: 'application/octet-stream',
+    baseIRI: 'https://example.org/data.jsonld'
+  });
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].object.value, 'guessed from .jsonld');
+});
+
+test('RdfParsers ignores query strings and fragments when guessing from the URL', async () => {
+  const { triples } = await collect({
+    bodyText: '<https://example.org/s> <https://example.org/p> "still guessed" .',
+    contentType: 'text/plain',
+    baseIRI: 'https://example.org/data.ttl?version=2#fragment'
+  });
+  assert.equal(triples.length, 1);
+});
+
+test('RdfParsers keeps text/plain as-is when the extension is unrecognized', async () => {
+  await assert.rejects(
+    collect({ bodyText: 'whatever', contentType: 'text/plain', baseIRI: 'https://example.org/data.unknownext' }),
+    /Unsupported content type: text\/plain/
+  );
+});
+
+test('RdfParsers does not second-guess a properly declared content type', async () => {
+  const { triples } = await collect({
+    bodyText: '@prefix ex: <https://example.org/> .\nex:s ex:p "declared, not guessed" .',
+    contentType: 'text/turtle',
+    baseIRI: 'https://example.org/data.jsonld'
+  });
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].object.value, 'declared, not guessed');
 });
