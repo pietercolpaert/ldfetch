@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const zlib = require('node:zlib');
 
 const RdfParsers = require('../lib/RdfParsers.js');
 
@@ -199,4 +200,56 @@ test('RdfParsers does not second-guess a properly declared content type', async 
   });
   assert.equal(triples.length, 1);
   assert.equal(triples[0].object.value, 'declared, not guessed');
+});
+
+test('RdfParsers transparently decompresses a gzip-compressed Turtle file', async () => {
+  const turtle = '@prefix ex: <https://example.org/> .\nex:s ex:p "from gzip" .';
+  const { triples, prefixes } = await collect({
+    bodyBuffer: zlib.gzipSync(Buffer.from(turtle)),
+    contentType: 'application/octet-stream',
+    baseIRI: 'https://example.org/data.ttl.gz'
+  });
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].object.value, 'from gzip');
+  assert.equal(prefixes.ex, 'https://example.org/');
+});
+
+test('RdfParsers transparently decompresses a zstd-compressed Turtle file', async () => {
+  const turtle = '@prefix ex: <https://example.org/> .\nex:s ex:p "from zstd" .';
+  const { triples } = await collect({
+    bodyBuffer: zlib.zstdCompressSync(Buffer.from(turtle)),
+    contentType: 'application/octet-stream',
+    baseIRI: 'https://example.org/data.ttl.zst'
+  });
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].object.value, 'from zstd');
+});
+
+test('RdfParsers detects compression from magic bytes even with a misleading content type', async () => {
+  const turtle = '<https://example.org/s> <https://example.org/p> "still detected" .';
+  const { triples } = await collect({
+    bodyBuffer: zlib.gzipSync(Buffer.from(turtle)),
+    contentType: 'text/turtle',
+    baseIRI: 'https://example.org/data.ttl.gz'
+  });
+  assert.equal(triples.length, 1);
+});
+
+test('RdfParsers decompresses gzip-compressed Jelly-RDF', async () => {
+  const { DataFactory, Writer } = require('rdfjs-jelly');
+  const { namedNode, literal, quad } = DataFactory;
+  const jellyBytes = await new Promise((resolve, reject) => {
+    const writer = new Writer({ namespaces: { ex: 'https://example.org/' } });
+    writer.addQuad(quad(namedNode('https://example.org/s'), namedNode('https://example.org/p'), literal('from gzipped jelly')));
+    writer.end((error, output) => error ? reject(error) : resolve(output));
+  });
+
+  const { triples, prefixes } = await collect({
+    bodyBuffer: zlib.gzipSync(jellyBytes),
+    contentType: 'application/octet-stream',
+    baseIRI: 'https://example.org/data.jelly.gz'
+  });
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].object.value, 'from gzipped jelly');
+  assert.equal(prefixes.ex, 'https://example.org/');
 });

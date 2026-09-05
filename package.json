@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@hapi/wreck": "^18.1.2",
+    "@hpcc-js/wasm-zstd": "^1.16.0",
     "buffer": "^6.0.3",
     "commander": "^15.0.0",
     "follow-redirects": "^1.16.0",
@@ -50,6 +51,7 @@
     "microdata-rdf-streaming-parser": "^3.0.0",
     "node-cache": "^5.1.2",
     "process": "^0.11.10",
+    "puppeteer-core": "^25.10.0",
     "q": "^2.0.3",
     "rdf-parser-ts": "^0.3.1",
     "rdf-writer-ts": "^0.1.1",
