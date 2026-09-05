@@ -473,14 +473,16 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!response.ok) throw new Error('Request failed: HTTP ' + response.status);
       streamingReader = response.body.getReader();
       streamingDecoder = new TextDecoder('utf-8');
-      var seenPrefixes = Object.assign({}, COMMON_PREFIXES);
-      renderPrefixes(seenPrefixes);
+      // The "prefixes used" panel shows only what the source itself
+      // declares, not COMMON_PREFIXES (that set is only for compacting the
+      // per-message TriG output in serializeMessage -- it's noise here).
+      var documentPrefixes = {};
       streamingParser = new rdfParserTs.IncrementalParser({ baseIRI: url, format: 'text/turtle' }, {
         prefix: function (prefix, iri) {
           var value = (iri && iri.value !== undefined) ? iri.value : iri;
-          if (!(prefix in seenPrefixes)) {
-            seenPrefixes[prefix] = value;
-            renderPrefixes(seenPrefixes);
+          if (!(prefix in documentPrefixes)) {
+            documentPrefixes[prefix] = value;
+            renderPrefixes(documentPrefixes);
           }
         }
       });
@@ -658,6 +660,19 @@ document.addEventListener('DOMContentLoaded', function () {
       writerReady = true;
     }
 
+    // The "prefixes used" panel shows only what the source itself declares
+    // (via the live 'prefix' event, which only ever fires for prefixes the
+    // parser actually encountered) -- not response.prefixes, which also
+    // carries every COMMON_PREFIXES entry registered above purely to keep
+    // the output text compact.
+    var documentPrefixes = {};
+    fetcher.on('prefix', function (prefix, iri) {
+      if (!(prefix in documentPrefixes)) {
+        documentPrefixes[prefix] = iri;
+        renderPrefixes(documentPrefixes);
+      }
+    });
+
     var quadCount = 0;
     // Jelly-RDF's 'message' event fires before the individual quads it
     // contains reach 'quad' (verified: message, then its quads). Once we
@@ -686,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     fetcher.get(url).then(function (response) {
       if (writer) writer.end();
-      renderPrefixes(response.prefixes);
+      renderPrefixes(documentPrefixes);
       finishMessages();
       // RDF Messages are a sequence of discrete messages, not one document --
       // when the source is message-framed, the slider below is the whole
