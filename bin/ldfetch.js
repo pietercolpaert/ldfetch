@@ -16,7 +16,7 @@ var list = function (val) {
 program
   .option('-p, --predicates <predicates ...>', 'Some predicates can be followed [predicates]', list)
   .option('--frame <jsonldframe|file>', 'Add a JSON-LD frame')
-  .option('--local-files', 'Allow fetching file:// URLs (disabled by default; only use with trusted input)')
+  .option('-l, --local-files', 'Allow fetching file:// URLs (disabled by default; only use with trusted input)')
   .arguments('<url>')
   .action(function (argUrl) {
     url = argUrl;
