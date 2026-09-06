@@ -2,9 +2,13 @@
 
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const path = require('node:path');
 const test = require('node:test');
+const { pathToFileURL } = require('node:url');
 
 const NodeHttpFetcher = require('../lib/NodeHttpFetcher.js');
+
+const fixtureUrl = pathToFileURL(path.join(__dirname, 'fixtures', 'example.ttl')).toString();
 
 function createServer(handler) {
   const server = http.createServer(handler);
@@ -98,4 +102,33 @@ test('NodeHttpFetcher rejects server errors', async () => {
   } finally {
     await closeServer(server);
   }
+});
+
+test('NodeHttpFetcher rejects file:// URLs by default', async () => {
+  const fetcher = new NodeHttpFetcher('text/turtle');
+
+  await assert.rejects(
+    fetcher.get(fixtureUrl),
+    /localFiles/
+  );
+});
+
+test('NodeHttpFetcher reads file:// URLs when localFiles is enabled', async () => {
+  const fetcher = new NodeHttpFetcher('text/turtle');
+  fetcher.localFiles = true;
+
+  const response = await fetcher.get(fixtureUrl);
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /Alice/);
+});
+
+test('NodeHttpFetcher rejects missing local files with localFiles enabled', async () => {
+  const fetcher = new NodeHttpFetcher('text/turtle');
+  fetcher.localFiles = true;
+
+  await assert.rejects(
+    fetcher.get(pathToFileURL(path.join(__dirname, 'fixtures', 'does-not-exist.ttl')).toString()),
+    /Request failed:/
+  );
 });

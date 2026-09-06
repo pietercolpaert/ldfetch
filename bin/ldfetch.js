@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 var ldfetch = require('../lib/ldfetch.js');
-var fetch = new ldfetch();
+var isAllowedProtocol = require('../lib/allowedProtocol.js');
 var rdfWriter = require('rdf-writer-ts');
 var program = require('commander').program;
 var path = require('path');
@@ -16,9 +16,9 @@ var list = function (val) {
 program
   .option('-p, --predicates <predicates ...>', 'Some predicates can be followed [predicates]', list)
   .option('--frame <jsonldframe|file>', 'Add a JSON-LD frame')
+  .option('-l, --local-files', 'Allow fetching file:// URLs (disabled by default; only use with trusted input)')
   .arguments('<url>')
   .action(function (argUrl) {
-    //TODO: check whether starts with http(s)?
     url = argUrl;
   })
   .parse(process.argv);
@@ -27,17 +27,24 @@ let options = program.opts();
 
 if (!options.predicates)  options.predicates = [];
 
+var fetch = new ldfetch({ localFiles: !!options.localFiles });
+
 //Prefixes to be added to the writer so we can output the data in an easier fashion
 fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
 
-if (!process.argv[2]) {
+if (!url) {
   console.error('Provide a URI please');
   process.exit();
 }
 
 var history = [url];
 
-var url = process.argv[2];
+if (!isAllowedProtocol(url, { localFiles: options.localFiles })) {
+  console.error(options.localFiles
+    ? 'Only http://, https:// and file:// URLs are supported'
+    : 'Only http:// and https:// URLs are supported (pass --local-files to also allow file:// URLs)');
+  process.exit(1);
+}
 var writer = new rdfWriter.Writer(process.stdout, {end: false});
 var prefixesWritten = false;
 
