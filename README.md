@@ -39,6 +39,8 @@ Features for the Command Line:
 
 You can also use [JSON-LD framing](https://json-ld.org/spec/latest/json-ld-framing/) from the CLI: `ldfetch https://pietercolpaert.be/ --frame {}` to return a JSON-LD object complying to your frame.
 
+By default, only `http://` and `https://` URLs are fetched. Pass `--local-files` to also allow `file://` URLs, e.g. `ldfetch --local-files file:///path/to/data.ttl` (disabled by default for security; only use with trusted input).
+
 For full, well tested and modular SPARQL or GraphQL Web Querying, we refer to the [Comunica project](http://comunica.linkeddatafragments.org).
 
 ### Browser
