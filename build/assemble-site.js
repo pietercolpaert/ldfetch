@@ -14,6 +14,7 @@ fs.mkdirSync(siteDir, { recursive: true });
 const files = [
   ['playground/index.html', 'index.html'],
   ['playground/style.css', 'style.css'],
+  ['playground/favicon.svg', 'favicon.svg'],
   ['dist/main.js', 'main.js'],
   ['dist/main.js.map', 'main.js.map'],
   ['dist/playground.js', 'playground.js'],

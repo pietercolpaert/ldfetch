@@ -1,0 +1,928 @@
+'use strict';
+
+var RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+var RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
+var XSD = 'http://www.w3.org/2001/XMLSchema#';
+var FOAF = 'http://xmlns.com/foaf/0.1/';
+var SCHEMA = ['https://schema.org/', 'http://schema.org/'];
+var VCARD = 'http://www.w3.org/2006/vcard/ns#';
+var SH = 'http://www.w3.org/ns/shacl#';
+var SKOS = 'http://www.w3.org/2004/02/skos/core#';
+var OWL = 'http://www.w3.org/2002/07/owl#';
+var GEO = 'http://www.w3.org/2003/01/geo/wgs84_pos#';
+var GEOSPARQL = 'http://www.opengis.net/ont/geosparql#';
+var PROV = 'http://www.w3.org/ns/prov#';
+var DCAT = 'http://www.w3.org/ns/dcat#';
+var SOSA = 'http://www.w3.org/ns/sosa/';
+var QB = 'http://purl.org/linked-data/cube#';
+var OA = 'http://www.w3.org/ns/oa#';
+var VC = 'https://www.w3.org/2018/credentials#';
+var HYDRA = 'http://www.w3.org/ns/hydra/core#';
+var TREE = 'https://w3id.org/tree#';
+var IIIF = 'http://iiif.io/api/presentation/3#';
+var RML = 'http://semweb.mmlab.be/ns/rml#';
+var RR = 'http://www.w3.org/ns/r2rml#';
+var SSSOM = 'https://w3id.org/sssom/';
+var ORG = 'http://www.w3.org/ns/org#';
+
+var LABELS = [
+  SCHEMA[0] + 'name', SCHEMA[1] + 'name', FOAF + 'name', VCARD + 'fn',
+  SKOS + 'prefLabel', RDFS + 'label', 'http://purl.org/dc/terms/title',
+  'http://purl.org/dc/elements/1.1/title'
+];
+
+function termKey(term) {
+  if (!term) return '';
+  var suffix = '';
+  if (term.termType === 'Literal') {
+    suffix = '|' + (term.language || '') + '|' + (term.datatype ? term.datatype.value : '');
+  }
+  return term.termType + '|' + term.value + suffix;
+}
+
+function uniqueTerms(terms) {
+  var seen = {};
+  return terms.filter(function (term) {
+    var key = termKey(term);
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+
+function DatasetIndex(prefixes) {
+  this.prefixes = Object.assign({}, prefixes || {});
+  this.entities = new Map();
+  this.incoming = new Map();
+  this.quads = [];
+  this.predicates = new Map();
+  this.graphs = new Map();
+}
+
+DatasetIndex.prototype.add = function (quad) {
+  this.quads.push(quad);
+  var sk = termKey(quad.subject);
+  var entity = this.entities.get(sk);
+  if (!entity) {
+    entity = { term: quad.subject, properties: new Map(), quads: [] };
+    this.entities.set(sk, entity);
+  }
+  var values = entity.properties.get(quad.predicate.value) || [];
+  values.push(quad.object);
+  entity.properties.set(quad.predicate.value, values);
+  entity.quads.push(quad);
+
+  var predicateQuads = this.predicates.get(quad.predicate.value) || [];
+  predicateQuads.push(quad);
+  this.predicates.set(quad.predicate.value, predicateQuads);
+
+  if (quad.object.termType !== 'Literal') {
+    var ok = termKey(quad.object);
+    var incomingQuads = this.incoming.get(ok) || [];
+    incomingQuads.push(quad);
+    this.incoming.set(ok, incomingQuads);
+  }
+  if (quad.graph && quad.graph.termType !== 'DefaultGraph') {
+    var gk = termKey(quad.graph);
+    if (!this.graphs.has(gk)) this.graphs.set(gk, quad.graph);
+  }
+};
+
+DatasetIndex.prototype.addAll = function (quads) {
+  var self = this;
+  (quads || []).forEach(function (quad) { self.add(quad); });
+};
+
+DatasetIndex.prototype.entity = function (termOrKey) {
+  return this.entities.get(typeof termOrKey === 'string' ? termOrKey : termKey(termOrKey));
+};
+
+DatasetIndex.prototype.values = function (entityOrTerm, predicates) {
+  var entity = entityOrTerm && entityOrTerm.properties ? entityOrTerm : this.entity(entityOrTerm);
+  if (!entity) return [];
+  var result = [];
+  (Array.isArray(predicates) ? predicates : [predicates]).forEach(function (predicate) {
+    result = result.concat(entity.properties.get(predicate) || []);
+  });
+  return uniqueTerms(result);
+};
+
+DatasetIndex.prototype.hasType = function (entity, types) {
+  var wanted = Array.isArray(types) ? types : [types];
+  return this.values(entity, RDF + 'type').some(function (term) { return wanted.indexOf(term.value) !== -1; });
+};
+
+DatasetIndex.prototype.entitiesOfType = function (types) {
+  var self = this;
+  return Array.from(this.entities.values()).filter(function (entity) { return self.hasType(entity, types); });
+};
+
+DatasetIndex.prototype.compact = function (iri) {
+  var best = '';
+  var bestPrefix = '';
+  var prefixes = this.prefixes;
+  Object.keys(prefixes).forEach(function (prefix) {
+    var namespace = String(prefixes[prefix]);
+    if (iri.indexOf(namespace) === 0 && namespace.length > best.length) {
+      best = namespace;
+      bestPrefix = prefix;
+    }
+  });
+  if (best) return bestPrefix + ':' + iri.slice(best.length);
+  var cut = Math.max(iri.lastIndexOf('#'), iri.lastIndexOf('/'));
+  return cut >= 0 && cut < iri.length - 1 ? iri.slice(cut + 1) : iri;
+};
+
+DatasetIndex.prototype.label = function (entityOrTerm) {
+  var entity = entityOrTerm && entityOrTerm.properties ? entityOrTerm : this.entity(entityOrTerm);
+  var self = this;
+  if (entity) {
+    for (var i = 0; i < LABELS.length; i++) {
+      var values = this.values(entity, LABELS[i]);
+      var english = values.find(function (term) { return term.language === 'en'; });
+      if (english) return english.value;
+      if (values.length) return values[0].value;
+    }
+  }
+  var term = entity ? entity.term : entityOrTerm;
+  if (!term) return '';
+  if (term.termType === 'Literal') return term.value;
+  return self.compact(term.value || '');
+};
+
+DatasetIndex.prototype.searchable = function (entity) {
+  var values = [entity.term.value, this.label(entity)];
+  entity.properties.forEach(function (terms, predicate) {
+    values.push(predicate);
+    terms.forEach(function (term) { values.push(term.value); });
+  });
+  return values.join(' ').toLowerCase();
+};
+
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function safeUrl(value) {
+  if (!value || !String(value).trim()) return '';
+  try {
+    var url = new URL(value, document.baseURI);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+  } catch (error) { return ''; }
+}
+
+function termHtml(index, term) {
+  if (!term) return '';
+  if (term.termType === 'Literal') {
+    var suffix = term.language ? ' <small>@' + esc(term.language) + '</small>' :
+      (term.datatype && term.datatype.value !== XSD + 'string' ? ' <small>^^' + esc(index.compact(term.datatype.value)) + '</small>' : '');
+    return '<span class="literal">' + esc(term.value) + '</span>' + suffix;
+  }
+  var key = termKey(term);
+  return '<button type="button" class="entity-link" data-entity="' + esc(key) + '" title="' + esc(term.value) + '">' + esc(index.label(term)) + '</button>';
+}
+
+function propertyValues(index, entity, predicates) {
+  return index.values(entity, predicates).map(function (term) { return term.value; });
+}
+
+function firstValue(index, entity, predicates) {
+  return propertyValues(index, entity, predicates)[0] || '';
+}
+
+function mediaUrl(index, term) {
+  if (!term) return '';
+  var media = index.entity(term);
+  var content = media && firstValue(index, media, [SCHEMA[0] + 'contentUrl', SCHEMA[1] + 'contentUrl', SCHEMA[0] + 'url', SCHEMA[1] + 'url']);
+  return safeUrl(content || term.value);
+}
+
+function safeContactUrl(value) {
+  if (!value || !String(value).trim()) return '';
+  if (/^[^\s@]+@[^\s@]+$/.test(value)) return 'mailto:' + value;
+  try {
+    var url = new URL(value, document.baseURI);
+    return ['http:', 'https:', 'mailto:', 'tel:'].indexOf(url.protocol) !== -1 ? url.href : '';
+  } catch (error) { return ''; }
+}
+
+function entityTable(index, entities, filter, limit) {
+  var needle = (filter || '').trim().toLowerCase();
+  var filtered = entities.filter(function (entity) { return !needle || index.searchable(entity).indexOf(needle) !== -1; });
+  var shown = filtered.slice(0, limit || 200);
+  var rows = shown.map(function (entity) {
+    var types = index.values(entity, RDF + 'type').map(function (type) { return index.compact(type.value); }).join(', ');
+    return '<tr><th scope="row">' + termHtml(index, entity.term) + '</th><td>' + esc(types || '—') + '</td><td>' + entity.quads.length + '</td></tr>';
+  }).join('');
+  return '<p class="view-count">Showing ' + shown.length + ' of ' + filtered.length + ' matching entities</p>' +
+    '<div class="table-scroll"><table class="entity-table"><thead><tr><th>Entity</th><th>Type</th><th>Statements</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (filtered.length > shown.length ? '<p class="view-note">Refine the filter to inspect the remaining entities.</p>' : '');
+}
+
+function detailsHtml(index, entity) {
+  if (!entity) return '<p>Select an entity in any view to inspect its statements.</p>';
+  var rows = [];
+  entity.properties.forEach(function (terms, predicate) {
+    rows.push('<tr><th>' + esc(index.compact(predicate)) + '</th><td>' + terms.map(function (term) { return termHtml(index, term); }).join('<br>') + '</td></tr>');
+  });
+  var entityUrl = entity.term.termType === 'NamedNode' ? safeUrl(entity.term.value) : '';
+  return '<div class="entity-heading"><h3>' + esc(index.label(entity)) + '</h3>' +
+    (entityUrl ? '<a href="' + esc(entityUrl) + '" target="_blank" rel="noopener">' + esc(entity.term.value) + '</a>' : '<span class="entity-identifier">' + esc(entity.term.value) + '</span>') + '</div>' +
+    '<div class="table-scroll"><table class="details-table"><tbody>' + rows.join('') + '</tbody></table></div>';
+}
+
+function overviewModule() {
+  return {
+    id: 'overview', title: 'Overview', priority: 1000,
+    detect: function () { return { useful: true }; },
+    render: function (index, state) {
+      var types = {};
+      index.entities.forEach(function (entity) {
+        index.values(entity, RDF + 'type').forEach(function (type) { types[type.value] = (types[type.value] || 0) + 1; });
+      });
+      var topTypes = Object.keys(types).sort(function (a, b) { return types[b] - types[a]; }).slice(0, 8);
+      return '<div class="stat-grid"><div><strong>' + index.quads.length + '</strong><span>statements</span></div><div><strong>' + index.entities.size + '</strong><span>entities</span></div><div><strong>' + index.predicates.size + '</strong><span>properties</span></div><div><strong>' + index.graphs.size + '</strong><span>named graphs</span></div></div>' +
+        (topTypes.length ? '<div class="type-cloud">' + topTypes.map(function (type) { return '<span>' + esc(index.compact(type)) + ' <b>' + types[type] + '</b></span>'; }).join('') + '</div>' : '') +
+        entityTable(index, Array.from(index.entities.values()), state.filter);
+    }
+  };
+}
+
+function profilesModule() {
+  var types = [FOAF + 'Person', SCHEMA[0] + 'Person', SCHEMA[1] + 'Person', VCARD + 'Individual'];
+  function people(index) {
+    return Array.from(index.entities.values()).filter(function (entity) {
+      if (index.hasType(entity, types)) return true;
+      return index.values(entity, [VCARD + 'fn', VCARD + 'hasName']).length > 0 && !index.hasType(entity, [VCARD + 'Organization', VCARD + 'Group']);
+    });
+  }
+  return {
+    id: 'profiles', title: 'People', priority: 900,
+    detect: function (index) { var found = people(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var found = people(index).filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; });
+      var cards = found.map(function (entity) {
+        var imageTerm = index.values(entity, [FOAF + 'img', FOAF + 'depiction', SCHEMA[0] + 'image', SCHEMA[1] + 'image', VCARD + 'hasPhoto'])[0];
+        var image = mediaUrl(index, imageTerm);
+        var description = firstValue(index, entity, [SCHEMA[0] + 'description', SCHEMA[1] + 'description', 'http://purl.org/dc/terms/description']);
+        var homepage = firstValue(index, entity, [FOAF + 'homepage', SCHEMA[0] + 'url', SCHEMA[1] + 'url']);
+        var roles = propertyValues(index, entity, [SCHEMA[0] + 'jobTitle', SCHEMA[1] + 'jobTitle', VCARD + 'role']);
+        var affiliations = index.values(entity, [SCHEMA[0] + 'affiliation', SCHEMA[1] + 'affiliation', ORG + 'memberOf']);
+        var contacts = index.values(entity, [FOAF + 'mbox', SCHEMA[0] + 'email', SCHEMA[1] + 'email', VCARD + 'hasEmail', SCHEMA[0] + 'telephone', SCHEMA[1] + 'telephone', VCARD + 'hasTelephone']);
+        return '<article class="profile-card" data-select-entity="' + esc(termKey(entity.term)) + '">' +
+          (image ? '<img src="' + esc(image) + '" alt="Portrait of ' + esc(index.label(entity)) + '" loading="lazy" referrerpolicy="no-referrer">' : '<div class="profile-placeholder" aria-hidden="true">' + esc(index.label(entity).charAt(0).toUpperCase() || '?') + '</div>') +
+          '<div><h3>' + esc(index.label(entity)) + '</h3>' + (description ? '<p>' + esc(description) + '</p>' : '') +
+          (roles.length ? '<p class="profile-meta"><b>Role</b> ' + esc(roles.join(', ')) + '</p>' : '') +
+          (affiliations.length ? '<p class="profile-meta"><b>Affiliation</b> ' + affiliations.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          (contacts.length ? '<div class="profile-links">' + contacts.map(function (term) { var url = safeContactUrl(term.value); return url ? '<a href="' + esc(url) + '">' + esc(url.indexOf('tel:') === 0 ? 'Call' : 'Email') + '</a>' : '<span>' + esc(term.value) + '</span>'; }).join('') + '</div>' : '') +
+          (homepage && safeUrl(homepage) ? '<a href="' + esc(safeUrl(homepage)) + '" target="_blank" rel="noopener">Website</a>' : '') + '</div></article>';
+      }).join('');
+      return '<p class="view-count">' + found.length + ' ' + (found.length === 1 ? 'person' : 'people') + ' described</p><div class="profile-grid">' + cards + '</div>';
+    }
+  };
+}
+
+function imagesModule() {
+  var imagePredicates = [FOAF + 'img', FOAF + 'depiction', SCHEMA[0] + 'image', SCHEMA[1] + 'image', SCHEMA[0] + 'contentUrl', SCHEMA[1] + 'contentUrl', VCARD + 'hasPhoto'];
+  function images(index) {
+    var found = [];
+    index.entities.forEach(function (entity) {
+      index.values(entity, imagePredicates).forEach(function (term) {
+        var url = mediaUrl(index, term);
+        if (url) found.push({ owner: entity, term: term, url: url });
+      });
+      if (index.hasType(entity, [SCHEMA[0] + 'ImageObject', SCHEMA[1] + 'ImageObject'])) {
+        var content = index.values(entity, [SCHEMA[0] + 'contentUrl', SCHEMA[1] + 'contentUrl']);
+        content.forEach(function (term) { var url = mediaUrl(index, term); if (url) found.push({ owner: entity, term: term, url: url }); });
+      }
+    });
+    var seen = {};
+    return found.filter(function (item) { if (seen[item.url]) return false; seen[item.url] = true; return true; });
+  }
+  return {
+    id: 'images', title: 'Images', priority: 850,
+    detect: function (index) { var found = images(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var found = images(index);
+      return '<div class="image-grid">' + found.map(function (item) {
+        var url = item.url;
+        return '<figure><a href="' + esc(url) + '" target="_blank" rel="noopener"><img src="' + esc(url) + '" alt="' + esc(index.label(item.owner)) + '" loading="lazy" referrerpolicy="no-referrer"></a><figcaption>' + termHtml(index, item.owner.term) + '</figcaption></figure>';
+      }).join('') + '</div>';
+    }
+  };
+}
+
+function shaclModule() {
+  var constraints = [SH + 'minCount', SH + 'maxCount', SH + 'datatype', SH + 'class', SH + 'nodeKind', SH + 'pattern', SH + 'minLength', SH + 'maxLength', SH + 'in', SH + 'node', SH + 'closed'];
+  function shapes(index) {
+    return Array.from(index.entities.values()).filter(function (entity) {
+      return index.hasType(entity, [SH + 'NodeShape', SH + 'PropertyShape']) || index.values(entity, [SH + 'targetClass', SH + 'targetNode', SH + 'path', SH + 'property']).length;
+    });
+  }
+  return {
+    id: 'shapes', title: 'Shapes', priority: 880,
+    detect: function (index) { var found = shapes(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var found = shapes(index);
+      var nodeShapes = found.filter(function (shape) { return index.hasType(shape, SH + 'NodeShape') || index.values(shape, [SH + 'targetClass', SH + 'targetNode', SH + 'property']).length; });
+      var diagrams = nodeShapes.map(function (shape) {
+        var propertyShapes = index.values(shape, SH + 'property');
+        return '<div class="shape-flow"><button type="button" class="shape-node main" data-entity="' + esc(termKey(shape.term)) + '">' + esc(index.label(shape)) + '</button>' +
+          (propertyShapes.length ? '<div class="shape-branches">' + propertyShapes.map(function (propertyTerm) {
+            var property = index.entity(propertyTerm);
+            var path = property ? index.values(property, SH + 'path')[0] : null;
+            return '<div><span>' + esc(path ? index.compact(path.value) : 'property') + '</span><button type="button" class="shape-node" data-entity="' + esc(termKey(propertyTerm)) + '">' + esc(index.label(propertyTerm)) + '</button></div>';
+          }).join('') + '</div>' : '') + '</div>';
+      }).join('');
+      var cards = found.map(function (shape) {
+        var target = index.values(shape, [SH + 'targetClass', SH + 'targetNode']).map(function (term) { return termHtml(index, term); }).join(', ');
+        var path = index.values(shape, SH + 'path').map(function (term) { return termHtml(index, term); }).join(', ');
+        var propertyShapes = index.values(shape, SH + 'property');
+        var badges = [];
+        constraints.forEach(function (predicate) {
+          index.values(shape, predicate).forEach(function (value) { badges.push('<span><b>' + esc(index.compact(predicate)) + '</b> ' + termHtml(index, value) + '</span>'); });
+        });
+        return '<article class="shape-card" data-select-entity="' + esc(termKey(shape.term)) + '"><h3>' + esc(index.label(shape)) + '</h3>' +
+          (target ? '<p><b>targets</b> ' + target + '</p>' : '') + (path ? '<p><b>path</b> ' + path + '</p>' : '') +
+          (badges.length ? '<div class="constraint-badges">' + badges.join('') + '</div>' : '') +
+          (propertyShapes.length ? '<p><b>properties</b> ' + propertyShapes.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
+      }).join('');
+      return '<div class="view-actions"><button type="button" class="action-button" data-action="validate-shacl">Validate loaded data</button><a class="action-button secondary" href="https://playground.rdf-ext.org/shacl/" target="_blank" rel="noopener">Open online validator</a><a href="https://shacl-playground.zazuko.com/" target="_blank" rel="noopener">Alternative validator</a></div>' +
+        '<p class="view-note">The local validation uses the entire loaded document as both data and shapes graph. Results describe the current loaded snapshot.</p>' +
+        (state.validationHtml || '<div class="validation-result" data-validation-result></div>') + diagrams + '<div class="shape-grid">' + cards + '</div>';
+    }
+  };
+}
+
+function formPreviewModule() {
+  function nodeShapes(index) {
+    return Array.from(index.entities.values()).filter(function (entity) {
+      return index.hasType(entity, SH + 'NodeShape') || index.values(entity, [SH + 'targetClass', SH + 'targetNode', SH + 'property']).length > 0;
+    });
+  }
+  function fieldType(datatype, nodeKind) {
+    if (nodeKind === SH + 'IRI') return 'url';
+    if ([XSD + 'integer', XSD + 'decimal', XSD + 'double', XSD + 'float'].indexOf(datatype) !== -1) return 'number';
+    if ([XSD + 'date', XSD + 'dateTime', XSD + 'dateTimeStamp'].indexOf(datatype) !== -1) return datatype === XSD + 'date' ? 'date' : 'datetime-local';
+    return 'text';
+  }
+  return {
+    id: 'forms', title: 'Form preview', priority: 875,
+    detect: function (index) { var found = nodeShapes(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index) {
+      return '<p class="view-note">Read-only preview inferred from loaded SHACL property shapes. It does not save changes.</p><div class="form-preview-list">' + nodeShapes(index).map(function (shape) {
+        var properties = index.values(shape, SH + 'property');
+        return '<section><div class="form-preview-heading"><h3>' + esc(index.label(shape)) + '</h3>' + termHtml(index, shape.term) + '</div>' +
+          (properties.length ? properties.map(function (propertyTerm) {
+            var property = index.entity(propertyTerm);
+            if (!property) return '<p class="view-note">Unloaded property shape ' + termHtml(index, propertyTerm) + '</p>';
+            var path = index.values(property, SH + 'path')[0];
+            var label = firstValue(index, property, [SH + 'name', RDFS + 'label']) || (path ? index.compact(path.value) : index.label(property));
+            var datatype = firstValue(index, property, SH + 'datatype');
+            var nodeKind = firstValue(index, property, SH + 'nodeKind');
+            var min = Number(firstValue(index, property, SH + 'minCount') || 0);
+            var max = firstValue(index, property, SH + 'maxCount');
+            var help = [min > 0 ? 'required' : 'optional', max ? 'at most ' + max : 'repeatable', datatype ? index.compact(datatype) : (nodeKind ? index.compact(nodeKind) : '')].filter(Boolean).join(' · ');
+            return '<label class="shape-field"><span>' + esc(label) + (min > 0 ? ' <b aria-label="required">*</b>' : '') + '</span><input type="' + fieldType(datatype, nodeKind) + '" placeholder="' + esc(path ? index.compact(path.value) : 'Unsupported path') + '" readonly aria-describedby="' + esc(termKey(property.term)) + '-help"><small id="' + esc(termKey(property.term)) + '-help">' + esc(help) + '</small></label>';
+          }).join('') : '<p>No property shapes are linked from this node shape.</p>') + '</section>';
+      }).join('') + '</div>';
+    }
+  };
+}
+
+function credentialsModule() {
+  var types = [VC + 'VerifiableCredential', VC + 'VerifiablePresentation'];
+  function credentials(index) { return index.entitiesOfType(types); }
+  return {
+    id: 'credentials', title: 'Credentials', priority: 870,
+    detect: function (index) { var found = credentials(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index) {
+      return '<div class="credential-list">' + credentials(index).map(function (credential) {
+        var issuer = index.values(credential, VC + 'issuer');
+        var subjects = index.values(credential, VC + 'credentialSubject');
+        var holders = index.values(credential, VC + 'holder');
+        var proofs = index.values(credential, VC + 'proof');
+        var credentialStatus = index.values(credential, VC + 'credentialStatus');
+        var validFrom = firstValue(index, credential, VC + 'validFrom');
+        var validUntil = firstValue(index, credential, VC + 'validUntil');
+        return '<article class="credential-card" data-select-entity="' + esc(termKey(credential.term)) + '"><div class="credential-status">Not checked</div><h3>' + esc(index.label(credential)) + '</h3>' +
+          (issuer.length ? '<p><b>Issuer</b> ' + issuer.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          (holders.length ? '<p><b>Holder</b> ' + holders.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          (subjects.length ? '<p><b>Subject</b> ' + subjects.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          (validFrom || validUntil ? '<p><b>Validity</b> ' + esc(validFrom || '…') + ' – ' + esc(validUntil || '…') + '</p>' : '') +
+          (proofs.length ? '<p><b>Declared proof</b> ' + proofs.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          (credentialStatus.length ? '<p><b>Declared status</b> ' + credentialStatus.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          '<p class="view-note">Proof and status have not been cryptographically verified by this viewer.</p></article>';
+      }).join('') + '</div>';
+    }
+  };
+}
+
+function geographyModule() {
+  function points(index) {
+    var result = [];
+    index.entities.forEach(function (entity) {
+      var lat = parseFloat(firstValue(index, entity, GEO + 'lat'));
+      var lon = parseFloat(firstValue(index, entity, [GEO + 'long', GEO + 'lon']));
+      if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) result.push({ entity: entity, lat: lat, lon: lon });
+      index.values(entity, GEOSPARQL + 'asWKT').forEach(function (term) {
+        var match = term.value.match(/^\s*(?:<[^>]+>\s*)?POINT\s*(?:Z\s*)?\(\s*([-+\d.eE]+)\s+([-+\d.eE]+)/i);
+        if (match) result.push({ entity: entity, lon: Number(match[1]), lat: Number(match[2]) });
+      });
+    });
+    return result.filter(function (point) { return isFinite(point.lat) && isFinite(point.lon) && Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180; });
+  }
+  return {
+    id: 'map', title: 'Map', priority: 800,
+    detect: function (index) { var found = points(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index) {
+      var found = points(index);
+      var marks = found.map(function (point) {
+        var x = 2.5 + ((point.lon + 180) / 360) * 95;
+        var y = 5 + ((90 - point.lat) / 180) * 90;
+        return '<button type="button" class="map-point" data-entity="' + esc(termKey(point.entity.term)) + '" style="left:' + x.toFixed(2) + '%;top:' + y.toFixed(2) + '%" title="' + esc(index.label(point.entity) + ' (' + point.lat + ', ' + point.lon + ')') + '"><span></span></button>';
+      }).join('');
+      return '<div class="simple-map" role="img" aria-label="World overview containing ' + found.length + ' points"><div class="map-graticule"></div>' + marks + '</div><div class="map-list">' + found.map(function (point) { return '<p>' + termHtml(index, point.entity.term) + ' <span>' + esc(point.lat + ', ' + point.lon) + '</span></p>'; }).join('') + '</div><p class="view-note">Point preview. Full GeoSPARQL geometry, globe, and CRS transformation support are planned.</p>';
+    }
+  };
+}
+
+function temporalModule() {
+  function dates(index) {
+    var found = [];
+    index.quads.forEach(function (quad) {
+      if (quad.object.termType !== 'Literal') return;
+      var datatype = quad.object.datatype && quad.object.datatype.value;
+      if ([XSD + 'date', XSD + 'dateTime', XSD + 'dateTimeStamp', XSD + 'gYear'].indexOf(datatype) === -1) return;
+      var time = Date.parse(quad.object.value);
+      if (isFinite(time)) found.push({ quad: quad, time: time });
+    });
+    return found.sort(function (a, b) { return a.time - b.time; });
+  }
+  return {
+    id: 'timeline', title: 'Timeline', priority: 760,
+    detect: function (index) { var found = dates(index); return { useful: found.length > 1, count: found.length }; },
+    render: function (index) {
+      var found = dates(index);
+      var min = found[0].time;
+      var max = found[found.length - 1].time;
+      var span = Math.max(1, max - min);
+      var marks = found.map(function (item) {
+        var left = 2 + ((item.time - min) / span) * 96;
+        return '<button type="button" class="timeline-mark" data-entity="' + esc(termKey(item.quad.subject)) + '" style="left:' + left.toFixed(2) + '%" title="' + esc(index.label(item.quad.subject) + ': ' + item.quad.object.value) + '"></button>';
+      }).join('');
+      return '<div class="timeline-axis">' + marks + '</div><div class="timeline-labels"><span>' + esc(new Date(min).toISOString()) + '</span><span>' + esc(new Date(max).toISOString()) + '</span></div>' + entityTable(index, uniqueTerms(found.map(function (item) { return item.quad.subject; })).map(function (term) { return index.entity(term); }).filter(Boolean), '', 100);
+    }
+  };
+}
+
+function taxonomyModule() {
+  function concepts(index) { return index.entitiesOfType(SKOS + 'Concept'); }
+  return {
+    id: 'taxonomy', title: 'Taxonomy', priority: 780,
+    detect: function (index) { var found = concepts(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var found = concepts(index);
+      var children = {};
+      var hasParent = {};
+      found.forEach(function (entity) {
+        index.values(entity, SKOS + 'broader').forEach(function (parent) {
+          var pk = termKey(parent);
+          (children[pk] || (children[pk] = [])).push(entity);
+          hasParent[termKey(entity.term)] = true;
+        });
+      });
+      function branch(entity, seen, depth) {
+        var key = termKey(entity.term);
+        if (seen[key]) return '<li>' + termHtml(index, entity.term) + ' <span class="warning-badge">cycle</span></li>';
+        if (depth > 8) return '<li>' + termHtml(index, entity.term) + ' …</li>';
+        var nextSeen = Object.assign({}, seen); nextSeen[key] = true;
+        var kids = (children[key] || []).filter(function (child) { return !state.filter || index.searchable(child).indexOf(state.filter.toLowerCase()) !== -1; });
+        return '<li>' + termHtml(index, entity.term) + (kids.length ? '<ul>' + kids.map(function (child) { return branch(child, nextSeen, depth + 1); }).join('') + '</ul>' : '') + '</li>';
+      }
+      var roots = found.filter(function (entity) { return !hasParent[termKey(entity.term)]; });
+      if (!roots.length) roots = found.slice(0, 20);
+      return '<div class="taxonomy"><ul>' + roots.map(function (root) { return branch(root, {}, 0); }).join('') + '</ul></div>';
+    }
+  };
+}
+
+function ontologyModule() {
+  var types = [RDFS + 'Class', OWL + 'Class', RDF + 'Property', OWL + 'ObjectProperty', OWL + 'DatatypeProperty', OWL + 'AnnotationProperty'];
+  function terms(index) { return index.entitiesOfType(types); }
+  return {
+    id: 'ontology', title: 'Ontology', priority: 770,
+    detect: function (index) { var found = terms(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var found = terms(index).filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; });
+      return '<div class="ontology-list">' + found.map(function (entity) {
+        var parents = index.values(entity, [RDFS + 'subClassOf', RDFS + 'subPropertyOf', OWL + 'equivalentClass', OWL + 'equivalentProperty']);
+        var domain = index.values(entity, RDFS + 'domain');
+        var range = index.values(entity, RDFS + 'range');
+        return '<article data-select-entity="' + esc(termKey(entity.term)) + '"><h3>' + esc(index.label(entity)) + '</h3>' +
+          (parents.length ? '<p><b>Extends/equivalent</b> ' + parents.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          (domain.length ? '<p><b>Domain</b> ' + domain.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+          (range.length ? '<p><b>Range</b> ' + range.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
+      }).join('') + '</div>';
+    }
+  };
+}
+
+function statisticsModule() {
+  function series(index) {
+    var groups = {};
+    index.quads.forEach(function (quad) {
+      if (quad.object.termType !== 'Literal') return;
+      var datatype = quad.object.datatype && quad.object.datatype.value;
+      if ([XSD + 'integer', XSD + 'decimal', XSD + 'double', XSD + 'float', XSD + 'nonNegativeInteger', XSD + 'positiveInteger'].indexOf(datatype) === -1) return;
+      var value = Number(quad.object.value);
+      if (!isFinite(value)) return;
+      (groups[quad.predicate.value] || (groups[quad.predicate.value] = [])).push({ quad: quad, value: value });
+    });
+    return Object.keys(groups).map(function (predicate) { return { predicate: predicate, values: groups[predicate] }; }).sort(function (a, b) { return b.values.length - a.values.length; });
+  }
+  return {
+    id: 'statistics', title: 'Charts', priority: 730,
+    detect: function (index) { var found = series(index); return { useful: found.some(function (item) { return item.values.length > 1; }) || index.entitiesOfType([QB + 'DataSet', QB + 'Observation']).length > 0, count: found.reduce(function (sum, item) { return sum + item.values.length; }, 0) }; },
+    render: function (index) {
+      var found = series(index).filter(function (item) { return item.values.length > 1; }).slice(0, 6);
+      if (!found.length) return '<p class="view-note">A Data Cube was detected, but no repeated numeric property is available in the loaded scope.</p>';
+      return '<div class="chart-list">' + found.map(function (item) {
+        var max = Math.max.apply(null, item.values.map(function (entry) { return Math.abs(entry.value); }).concat([1]));
+        return '<section><h3>' + esc(index.compact(item.predicate)) + '</h3><div class="bar-chart">' + item.values.slice(0, 50).map(function (entry) {
+          var width = Math.max(1, Math.abs(entry.value) / max * 100);
+          return '<button type="button" data-entity="' + esc(termKey(entry.quad.subject)) + '" title="' + esc(index.label(entry.quad.subject) + ': ' + entry.value) + '"><span style="width:' + width.toFixed(2) + '%"></span><b>' + esc(index.label(entry.quad.subject)) + '</b><em>' + esc(entry.value) + '</em></button>';
+        }).join('') + '</div></section>';
+      }).join('') + '</div><p class="view-note">Bars show raw loaded values; no aggregation or unit conversion has been applied.</p>';
+    }
+  };
+}
+
+function iiifModule() {
+  var types = [IIIF + 'Manifest', IIIF + 'Canvas', IIIF + 'AnnotationPage', OA + 'Annotation'];
+  function resources(index) { return index.entitiesOfType(types); }
+  function imageForCanvas(index, canvas) {
+    var pages = index.values(canvas, IIIF + 'items');
+    for (var i = 0; i < pages.length; i++) {
+      var page = index.entity(pages[i]);
+      var annotations = page ? index.values(page, IIIF + 'items') : [];
+      for (var j = 0; j < annotations.length; j++) {
+        var annotation = index.entity(annotations[j]);
+        var bodies = annotation ? index.values(annotation, OA + 'hasBody') : [];
+        for (var k = 0; k < bodies.length; k++) {
+          var bodyEntity = index.entity(bodies[k]);
+          var candidate = bodyEntity ? firstValue(index, bodyEntity, [SCHEMA[0] + 'contentUrl', SCHEMA[1] + 'contentUrl']) : bodies[k].value;
+          if (safeUrl(candidate)) return { url: safeUrl(candidate), annotation: annotation };
+        }
+      }
+    }
+    return null;
+  }
+  return {
+    id: 'iiif', title: 'Presentation', priority: 840,
+    detect: function (index) { var found = resources(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index) {
+      var canvases = index.entitiesOfType(IIIF + 'Canvas');
+      var manifests = index.entitiesOfType(IIIF + 'Manifest');
+      var annotations = index.entitiesOfType(OA + 'Annotation');
+      return '<div class="presentation-heading">' + (manifests.length ? manifests.map(function (manifest) { return '<h3>' + esc(index.label(manifest)) + '</h3>'; }).join('') : '<h3>IIIF presentation</h3>') + '<span>' + canvases.length + ' canvas' + (canvases.length === 1 ? '' : 'es') + '</span></div>' +
+        '<div class="canvas-strip">' + canvases.map(function (canvas, position) {
+          var image = imageForCanvas(index, canvas);
+          return '<figure data-select-entity="' + esc(termKey(canvas.term)) + '"><div class="canvas-image">' + (image ? '<img src="' + esc(image.url) + '" alt="' + esc(index.label(canvas)) + '" loading="lazy" referrerpolicy="no-referrer">' : '<div class="image-unavailable">No supported painting image found</div>') + '</div><figcaption><b>' + (position + 1) + '</b> ' + esc(index.label(canvas)) + (image && image.annotation ? '<span>1 loaded annotation</span>' : '') + '</figcaption></figure>';
+        }).join('') + '</div>' + (annotations.length ? '<div class="annotation-list"><h3>Loaded annotations</h3>' + annotations.map(function (annotation) {
+          var targets = index.values(annotation, OA + 'hasTarget');
+          var bodies = index.values(annotation, OA + 'hasBody');
+          var motivations = index.values(annotation, OA + 'motivatedBy');
+          return '<article data-select-entity="' + esc(termKey(annotation.term)) + '"><h4>' + esc(index.label(annotation)) + '</h4>' +
+            (targets.length ? '<p><b>Target</b> ' + targets.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+            (bodies.length ? '<p><b>Body</b> ' + bodies.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
+            (motivations.length ? '<p><b>Motivation</b> ' + motivations.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
+        }).join('') + '</div>' : '') + '<p class="view-note">Canvas order follows the order recoverable from loaded RDF. Original IIIF JSON array order requires a manifest-preserving adapter.</p>';
+    }
+  };
+}
+
+function mappingsModule() {
+  var types = [RR + 'TriplesMap', RML + 'TriplesMap', SSSOM + 'Mapping'];
+  return cardsModule('mappings', 'Mappings', types, [
+    { label: 'Logical source', predicates: [RML + 'logicalSource', RR + 'logicalTable'] },
+    { label: 'Subject map', predicates: [RR + 'subjectMap'] },
+    { label: 'Source', predicates: [SSSOM + 'subject_id'] },
+    { label: 'Target', predicates: [SSSOM + 'object_id'] },
+    { label: 'Predicate', predicates: [SSSOM + 'predicate_id'] }
+  ], 705);
+}
+
+function datasetProfileModule() {
+  function ranked(map, labeler, limit) {
+    return Array.from(map.entries()).sort(function (a, b) { return b[1] - a[1]; }).slice(0, limit).map(function (item) {
+      return '<li><span>' + esc(labeler(item[0])) + '</span><b>' + item[1] + '</b></li>';
+    }).join('');
+  }
+  return {
+    id: 'profile', title: 'Dataset profile', priority: 660,
+    detect: function (index) { return { useful: index.quads.length > 0 }; },
+    render: function (index) {
+      var types = new Map();
+      var datatypes = new Map();
+      var languages = new Map();
+      index.quads.forEach(function (quad) {
+        if (quad.predicate.value === RDF + 'type') types.set(quad.object.value, (types.get(quad.object.value) || 0) + 1);
+        if (quad.object.termType === 'Literal') {
+          var datatype = quad.object.datatype && quad.object.datatype.value;
+          if (datatype) datatypes.set(datatype, (datatypes.get(datatype) || 0) + 1);
+          if (quad.object.language) languages.set(quad.object.language, (languages.get(quad.object.language) || 0) + 1);
+        }
+      });
+      var predicates = new Map();
+      index.predicates.forEach(function (quads, predicate) { predicates.set(predicate, quads.length); });
+      return '<div class="dataset-profile-grid"><section><h3>Classes</h3><ol>' + ranked(types, function (value) { return index.compact(value); }, 12) + '</ol></section>' +
+        '<section><h3>Properties</h3><ol>' + ranked(predicates, function (value) { return index.compact(value); }, 12) + '</ol></section>' +
+        '<section><h3>Literal datatypes</h3><ol>' + ranked(datatypes, function (value) { return index.compact(value); }, 12) + '</ol></section>' +
+        '<section><h3>Languages</h3>' + (languages.size ? '<ol>' + ranked(languages, function (value) { return value; }, 12) + '</ol>' : '<p class="view-note">No language-tagged literals in this scope.</p>') + '</section></div>';
+    }
+  };
+}
+
+function relationshipModule() {
+  function links(index) { return index.quads.filter(function (quad) { return quad.object.termType !== 'Literal'; }); }
+  return {
+    id: 'relationships', title: 'Relationships', priority: 670,
+    detect: function (index) { var found = links(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var selected = index.entity(state.entity);
+      if (!selected) {
+        selected = Array.from(index.entities.values()).sort(function (a, b) {
+          return (b.quads.length + (index.incoming.get(termKey(b.term)) || []).length) - (a.quads.length + (index.incoming.get(termKey(a.term)) || []).length);
+        })[0];
+      }
+      var outgoing = selected ? selected.quads.filter(function (quad) { return quad.object.termType !== 'Literal'; }) : [];
+      var incoming = selected ? (index.incoming.get(termKey(selected.term)) || []) : [];
+      function rows(quads, incomingDirection) {
+        return quads.slice(0, 100).map(function (quad) {
+          var other = incomingDirection ? quad.subject : quad.object;
+          return '<li><span>' + esc(index.compact(quad.predicate.value)) + '</span>' + termHtml(index, other) + '</li>';
+        }).join('') || '<li class="empty-relation">None in the loaded scope</li>';
+      }
+      return '<div class="relationship-focus"><p>Focused entity</p><h3>' + (selected ? termHtml(index, selected.term) : 'No linked entity') + '</h3></div><div class="relationship-columns"><section><h3>Incoming</h3><ul>' + rows(incoming, true) + '</ul></section><section><h3>Outgoing</h3><ul>' + rows(outgoing, false) + '</ul></section></div><p class="view-note">Select any linked entity to expand one neighborhood at a time.</p>';
+    }
+  };
+}
+
+function cardsModule(id, title, types, fields, priority) {
+  return {
+    id: id, title: title, priority: priority,
+    detect: function (index) { var found = index.entitiesOfType(types); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var found = index.entitiesOfType(types).filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; });
+      return '<div class="domain-card-grid">' + found.map(function (entity) {
+        var rows = fields.map(function (field) {
+          var values = index.values(entity, field.predicates);
+          return values.length ? '<p><b>' + esc(field.label) + '</b> ' + values.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '';
+        }).join('');
+        return '<article data-select-entity="' + esc(termKey(entity.term)) + '"><h3>' + esc(index.label(entity)) + '</h3>' + rows + '</article>';
+      }).join('') + '</div>';
+    }
+  };
+}
+
+function createRegistry() {
+  return [
+    overviewModule(), profilesModule(), imagesModule(), shaclModule(), formPreviewModule(), credentialsModule(),
+    geographyModule(), taxonomyModule(), ontologyModule(), temporalModule(), statisticsModule(), mappingsModule(),
+    cardsModule('datasets', 'Data catalog', [DCAT + 'Catalog', DCAT + 'Dataset', DCAT + 'Distribution'], [
+      { label: 'Publisher', predicates: ['http://purl.org/dc/terms/publisher'] },
+      { label: 'Description', predicates: ['http://purl.org/dc/terms/description'] },
+      { label: 'Distribution', predicates: [DCAT + 'distribution'] },
+      { label: 'Access', predicates: [DCAT + 'accessURL', DCAT + 'downloadURL'] }
+    ], 720),
+    cardsModule('sensors', 'Sensors', [SOSA + 'Sensor', SOSA + 'Observation', SOSA + 'Platform'], [
+      { label: 'Observed property', predicates: [SOSA + 'observedProperty'] },
+      { label: 'Feature', predicates: [SOSA + 'hasFeatureOfInterest'] },
+      { label: 'Result', predicates: [SOSA + 'hasSimpleResult', SOSA + 'hasResult'] },
+      { label: 'Time', predicates: [SOSA + 'resultTime', SOSA + 'phenomenonTime'] }
+    ], 710),
+    cardsModule('provenance', 'Provenance', [PROV + 'Entity', PROV + 'Activity', PROV + 'Agent'], [
+      { label: 'Used', predicates: [PROV + 'used'] },
+      { label: 'Generated', predicates: [PROV + 'wasGeneratedBy', PROV + 'generated'] },
+      { label: 'Attributed to', predicates: [PROV + 'wasAttributedTo', PROV + 'wasAssociatedWith'] }
+    ], 690),
+    cardsModule('hypermedia', 'Links & collections', [HYDRA + 'Collection', HYDRA + 'ApiDocumentation', TREE + 'Collection', TREE + 'Node'], [
+      { label: 'Members', predicates: [HYDRA + 'member', TREE + 'member'] },
+      { label: 'Next', predicates: [HYDRA + 'next'] },
+      { label: 'Relations', predicates: [TREE + 'relation'] }
+    ], 680),
+    cardsModule('organizations', 'Organizations', [ORG + 'Organization', ORG + 'OrganizationalUnit', ORG + 'Membership', ORG + 'Post'], [
+      { label: 'Organization', predicates: [ORG + 'organization', ORG + 'unitOf'] },
+      { label: 'Member', predicates: [ORG + 'member'] },
+      { label: 'Role', predicates: [ORG + 'role'] },
+      { label: 'Sub-organization', predicates: [ORG + 'hasSubOrganization'] }
+    ], 675),
+    iiifModule(), relationshipModule(), datasetProfileModule()
+  ];
+}
+
+function detectAvailable(index, registry) {
+  return (registry || createRegistry()).map(function (module) {
+    var result;
+    try { result = module.detect(index) || {}; } catch (error) { result = { useful: false, error: error }; }
+    return { module: module, result: result };
+  }).filter(function (item) { return item.result.useful; }).sort(function (a, b) { return (b.module.priority || 0) - (a.module.priority || 0); });
+}
+
+function createWorkbench(root, options) {
+  options = options || {};
+  var registry = options.registry || createRegistry();
+  var index = new DatasetIndex();
+  var allIndex = index;
+  var state = { view: 'overview', filter: '', entity: '', graph: '', partial: false, scopeLabel: 'loaded document' };
+  var renderTimer = null;
+  var disposed = false;
+
+  function notify() { if (options.onStateChange) options.onStateChange(getState()); }
+
+  function schedule() {
+    if (renderTimer || disposed) return;
+    renderTimer = setTimeout(function () { renderTimer = null; render(); }, 120);
+  }
+
+  function render() {
+    if (disposed) return;
+    root.hidden = allIndex.quads.length === 0;
+    if (root.hidden) return;
+    var graphField = root.querySelector('[data-graph-field]');
+    var graphSelect = root.querySelector('[data-graph-scope]');
+    var graphTerms = Array.from(allIndex.graphs.entries());
+    graphField.hidden = graphTerms.length === 0;
+    graphSelect.innerHTML = '<option value="">All graphs</option>' + graphTerms.map(function (entry) {
+      return '<option value="' + esc(entry[0]) + '">' + esc(allIndex.label(entry[1])) + '</option>';
+    }).join('');
+    graphSelect.value = state.graph;
+    var available = detectAvailable(index, registry);
+    var ids = available.map(function (item) { return item.module.id; });
+    if (ids.indexOf(state.view) === -1) state.view = 'overview';
+    var active = available.find(function (item) { return item.module.id === state.view; }) || available[0];
+    var tabs = available.map(function (item) {
+      var selected = item.module.id === state.view;
+      var count = item.result.count ? '<span>' + item.result.count + '</span>' : '';
+      return '<button type="button" role="tab" id="viewer-tab-' + esc(item.module.id) + '" aria-controls="viewer-active-panel" aria-selected="' + selected + '" tabindex="' + (selected ? '0' : '-1') + '" data-view="' + esc(item.module.id) + '">' + esc(item.module.title) + count + '</button>';
+    }).join('');
+    root.querySelector('[data-view-tabs]').innerHTML = tabs;
+    var graphStatus = state.graph && allIndex.graphs.get(state.graph) ? ' · graph ' + allIndex.label(allIndex.graphs.get(state.graph)) : '';
+    root.querySelector('[data-scope-status]').textContent = state.scopeLabel + graphStatus + (state.partial ? ' · loading, results are partial' : ' · complete');
+    var body = root.querySelector('[data-view-body]');
+    body.id = 'viewer-active-panel';
+    body.setAttribute('aria-labelledby', 'viewer-tab-' + active.module.id);
+    root.setAttribute('aria-busy', state.partial ? 'true' : 'false');
+    try { body.innerHTML = active.module.render(index, state); }
+    catch (error) { body.innerHTML = '<div class="view-error"><h3>This view could not be rendered</h3><p>' + esc(error.message || error) + '</p></div>'; }
+    var selectedEntity = index.entity(state.entity);
+    root.querySelector('[data-entity-details]').innerHTML = detailsHtml(index, selectedEntity);
+    root.querySelector('[data-entity-inspector]').open = !!selectedEntity;
+  }
+
+  function applyGraphScope() {
+    if (!state.graph) { index = allIndex; return; }
+    index = new DatasetIndex(allIndex.prefixes);
+    index.addAll(allIndex.quads.filter(function (quad) { return termKey(quad.graph) === state.graph; }));
+  }
+
+  function reset(prefixes, scopeLabel) {
+    allIndex = new DatasetIndex(prefixes);
+    index = state.graph ? new DatasetIndex(prefixes) : allIndex;
+    state.entity = '';
+    state.partial = true;
+    state.scopeLabel = scopeLabel || 'loaded document';
+    root.hidden = true;
+    render();
+  }
+
+  function addQuad(quad) {
+    allIndex.add(quad);
+    if (state.graph && termKey(quad.graph) === state.graph) index.add(quad);
+    schedule();
+  }
+
+  function complete(quads, prefixes, scopeLabel) {
+    if (quads) {
+      allIndex = new DatasetIndex(prefixes);
+      allIndex.addAll(quads);
+      if (state.graph && !allIndex.graphs.has(state.graph)) state.graph = '';
+      applyGraphScope();
+    } else if (prefixes) {
+      allIndex.prefixes = Object.assign({}, prefixes);
+      index.prefixes = Object.assign({}, prefixes);
+    }
+    state.partial = false;
+    if (scopeLabel) state.scopeLabel = scopeLabel;
+    render();
+  }
+
+  root.addEventListener('click', function (event) {
+    var action = event.target.closest('[data-action]');
+    if (action && action.dataset.action === 'validate-shacl') {
+      action.disabled = true;
+      action.textContent = 'Validating…';
+      validateShacl();
+      return;
+    }
+    var tab = event.target.closest('[data-view]');
+    if (tab) { state.view = tab.dataset.view; render(); notify(); return; }
+    var entityTarget = event.target.closest('[data-entity], [data-select-entity]');
+    if (entityTarget) {
+      state.entity = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
+      render(); notify();
+    }
+  });
+
+  root.addEventListener('keydown', function (event) {
+    var tab = event.target.closest('[data-view]');
+    if (!tab || ['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(event.key) === -1) return;
+    var tabs = Array.from(root.querySelectorAll('[data-view]'));
+    var current = tabs.indexOf(tab);
+    var next = event.key === 'Home' ? 0 : (event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length);
+    tabs[next].focus(); tabs[next].click(); event.preventDefault();
+  });
+
+  root.addEventListener('error', function (event) {
+    var image = event.target;
+    if (!image || image.tagName !== 'IMG') return;
+    var placeholder = document.createElement('div');
+    placeholder.className = 'image-unavailable';
+    placeholder.textContent = 'Image could not be loaded';
+    image.replaceWith(placeholder);
+  }, true);
+
+  var filterInput = root.querySelector('[data-view-filter]');
+  filterInput.addEventListener('input', function () { state.filter = filterInput.value; render(); notify(); });
+  root.querySelector('[data-graph-scope]').addEventListener('change', function (event) {
+    state.graph = event.target.value;
+    state.entity = '';
+    applyGraphScope();
+    render();
+    notify();
+  });
+
+  function getState() { return { view: state.view, filter: state.filter, entity: state.entity, graph: state.graph }; }
+
+  function validateShacl() {
+    state.validationHtml = '<div class="validation-result pending">Loading the SHACL engine…</div>';
+    render();
+    return Promise.all([
+      import('shacl-engine/Validator.js'),
+      import('@rdfjs/dataset'),
+      import('@rdfjs/data-model')
+    ]).then(function (modules) {
+      var Validator = modules[0].default;
+      var datasetFactory = modules[1].default;
+      var dataModel = modules[2].default;
+      var dataset = datasetFactory.dataset(index.quads);
+      var validator = new Validator(dataset, { factory: dataModel });
+      return validator.validate({ dataset: dataset });
+    }).then(function (report) {
+      if (report.conforms) {
+        state.validationHtml = '<div class="validation-result conforms"><strong>Conforms</strong><span>No SHACL violations were found in the loaded snapshot.</span></div>';
+      } else {
+        var rows = report.results.map(function (result) {
+          var focus = result.focusNode && result.focusNode.term;
+          var source = result.shape && result.shape.ptr && result.shape.ptr.term;
+          var messages = (result.message || []).map(function (message) { return message.value; }).join('; ');
+          return '<tr><td>' + (focus ? termHtml(index, focus) : '—') + '</td><td>' + (source ? termHtml(index, source) : '—') + '</td><td>' + esc(messages || index.compact(result.constraintComponent.value)) + '</td></tr>';
+        }).join('');
+        state.validationHtml = '<div class="validation-result violations"><strong>' + report.results.length + ' validation finding' + (report.results.length === 1 ? '' : 's') + '</strong><div class="table-scroll"><table class="entity-table"><thead><tr><th>Focus node</th><th>Source shape</th><th>Finding</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+      }
+      render();
+    }).catch(function (error) {
+      state.validationHtml = '<div class="validation-result failed"><strong>Validation could not run</strong><span>' + esc(error.message || error) + '</span></div>';
+      render();
+    });
+  }
+
+  function restoreState(next) {
+    if (!next) return;
+    if (next.view) state.view = next.view;
+    state.filter = next.filter || '';
+    state.entity = next.entity || '';
+    state.graph = next.graph || '';
+    applyGraphScope();
+    filterInput.value = state.filter;
+    render();
+  }
+
+  return {
+    reset: reset, addQuad: addQuad, complete: complete, render: render,
+    getState: getState, restoreState: restoreState,
+    setScope: function (quads, prefixes, label, partial) { allIndex = new DatasetIndex(prefixes); allIndex.addAll(quads); applyGraphScope(); state.scopeLabel = label; state.partial = !!partial; render(); },
+    dispose: function () { disposed = true; if (renderTimer) clearTimeout(renderTimer); root.innerHTML = ''; }
+  };
+}
+
+module.exports = {
+  DatasetIndex: DatasetIndex,
+  createRegistry: createRegistry,
+  detectAvailable: detectAvailable,
+  createWorkbench: createWorkbench,
+  termKey: termKey
+};

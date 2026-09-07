@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-labelledby="title description">
+  <title id="title">Illustrated portrait of Alice Example</title>
+  <desc id="description">A friendly geometric avatar on a blue background.</desc>
+  <rect width="320" height="320" rx="40" fill="#dceaf5"/>
+  <circle cx="160" cy="124" r="66" fill="#f2bf91"/>
+  <path d="M94 119c3-61 37-83 67-83 47 0 72 35 68 87-19-9-33-28-42-48-23 27-52 40-93 44z" fill="#344f68"/>
+  <circle cx="136" cy="124" r="5" fill="#313231"/>
+  <circle cx="185" cy="124" r="5" fill="#313231"/>
+  <path d="M138 157c15 12 30 12 45 0" fill="none" stroke="#9d5747" stroke-width="6" stroke-linecap="round"/>
+  <path d="M63 302c5-65 43-105 97-105s92 40 97 105" fill="#3b6790"/>
+  <path d="M126 203l34 42 34-42" fill="#fff" opacity=".9"/>
+</svg>

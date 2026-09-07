@@ -1,0 +1,11 @@
+@prefix ex: <https://example.org/graphs/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+ex:public {
+  ex:alice a foaf:Person ; foaf:name "Alice in the public graph" .
+}
+
+ex:archive {
+  ex:bob a foaf:Person ; foaf:name "Bob in the archive graph" .
+  ex:bob foaf:knows ex:alice .
+}

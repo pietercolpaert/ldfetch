@@ -1,0 +1,97 @@
+@prefix ex: <https://example.org/ldfetch-showcase/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix schema: <https://schema.org/> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix geo: <http://www.w3.org/2003/01/geo/wgs84_pos#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix qb: <http://purl.org/linked-data/cube#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix vc: <https://www.w3.org/2018/credentials#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix iiif: <http://iiif.io/api/presentation/3#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix hydra: <http://www.w3.org/ns/hydra/core#> .
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix sssom: <https://w3id.org/sssom/> .
+@prefix org: <http://www.w3.org/ns/org#> .
+
+ex:alice a foaf:Person, schema:Person ;
+  foaf:name "Alice Example" ;
+  schema:description "Researcher studying urban temperature observations." ;
+  schema:image <avatar-alice.svg> ;
+  foaf:knows ex:bob ;
+  geo:lat "50.8503"^^xsd:decimal ;
+  geo:long "4.3517"^^xsd:decimal .
+
+ex:bob a vcard:Individual ;
+  vcard:fn "Bob Example" ;
+  vcard:hasEmail <mailto:bob@example.org> ;
+  geo:lat "51.0543"^^xsd:decimal ;
+  geo:long "3.7174"^^xsd:decimal .
+
+ex:charlie a schema:Person ;
+  schema:description "A deliberately incomplete profile used to demonstrate SHACL findings." .
+
+ex:PersonShape a sh:NodeShape ;
+  sh:targetClass schema:Person ;
+  sh:property ex:nameProperty, ex:imageProperty .
+
+ex:nameProperty a sh:PropertyShape ;
+  sh:name "name" ;
+  sh:path foaf:name ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  sh:datatype xsd:string .
+
+ex:imageProperty a sh:PropertyShape ;
+  sh:name "portrait" ;
+  sh:path schema:image ;
+  sh:maxCount 1 ;
+  sh:nodeKind sh:IRI .
+
+ex:topics a skos:ConceptScheme ; skos:prefLabel "Viewer topics"@en .
+ex:linkedData a skos:Concept ; skos:inScheme ex:topics ; skos:prefLabel "Linked Data"@en ; skos:narrower ex:visualization .
+ex:visualization a skos:Concept ; skos:inScheme ex:topics ; skos:prefLabel "Visualization"@en ; skos:broader ex:linkedData .
+
+ex:sensor a sosa:Sensor ; rdfs:label "Brussels temperature sensor" ; sosa:madeObservation ex:observation1, ex:observation2 .
+ex:observation1 a sosa:Observation, qb:Observation ;
+  sosa:madeBySensor ex:sensor ; sosa:hasSimpleResult "18.4"^^xsd:decimal ;
+  sosa:resultTime "2026-09-07T09:00:00Z"^^xsd:dateTime ; qb:dataSet ex:temperatureDataset .
+ex:observation2 a sosa:Observation, qb:Observation ;
+  sosa:madeBySensor ex:sensor ; sosa:hasSimpleResult "20.1"^^xsd:decimal ;
+  sosa:resultTime "2026-09-07T12:00:00Z"^^xsd:dateTime ; qb:dataSet ex:temperatureDataset .
+ex:temperatureDataset a qb:DataSet ; rdfs:label "Temperature observations" .
+
+ex:catalog a dcat:Catalog ; dcterms:title "Example open-data catalog" ; dcat:dataset ex:dataset .
+ex:dataset a dcat:Dataset ; dcterms:title "Urban observations" ; dcterms:description "A demonstration dataset." ; dcat:distribution ex:distribution .
+ex:distribution a dcat:Distribution ; dcterms:title "Turtle distribution" ; dcat:downloadURL <https://example.org/data.ttl> .
+
+ex:collectionActivity a prov:Activity ; rdfs:label "Collect observations" ; prov:used ex:sensor ; prov:generated ex:temperatureDataset .
+ex:temperatureDataset a prov:Entity ; prov:wasGeneratedBy ex:collectionActivity ; prov:wasAttributedTo ex:alice .
+
+ex:credential a vc:VerifiableCredential ;
+  dcterms:title "Example research credential" ; vc:issuer ex:university ;
+  vc:credentialSubject ex:alice ; vc:validFrom "2026-01-01T00:00:00Z"^^xsd:dateTime .
+ex:university a prov:Agent ; rdfs:label "Example University" .
+
+ex:manifest a iiif:Manifest ; dcterms:title "Example image presentation" ; iiif:items ex:canvas .
+ex:canvas a iiif:Canvas ; dcterms:title "Portrait canvas" ; iiif:items ex:annotationPage .
+ex:annotationPage a iiif:AnnotationPage ; iiif:items ex:annotation .
+ex:annotation a oa:Annotation ; oa:hasTarget ex:canvas ; oa:hasBody <avatar-alice.svg> .
+
+ex:Researcher a owl:Class ; rdfs:label "Researcher" ; rdfs:subClassOf foaf:Person .
+ex:measuredValue a owl:DatatypeProperty ; rdfs:label "measured value" ; rdfs:domain sosa:Observation ; rdfs:range xsd:decimal .
+
+ex:peopleMapping a rr:TriplesMap ; rr:logicalTable ex:peopleTable ; rr:subjectMap ex:personSubjectMap .
+ex:conceptMapping a sssom:Mapping ; sssom:subject_id ex:linkedData ; sssom:object_id ex:visualization ; sssom:predicate_id skos:related .
+
+ex:collection a hydra:Collection ; rdfs:label "Showcase collection" ; hydra:member ex:alice, ex:bob ; hydra:next <visualization-showcase-page-2.ttl> .
+
+ex:researchLab a org:Organization ; rdfs:label "Example Research Lab" ; org:hasMember ex:alice .

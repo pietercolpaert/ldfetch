@@ -42,6 +42,8 @@
   "dependencies": {
     "@hapi/wreck": "^18.1.2",
     "@hpcc-js/wasm-zstd": "^1.16.0",
+    "@rdfjs/data-model": "^2.1.2",
+    "@rdfjs/dataset": "^2.0.3",
     "buffer": "^6.0.3",
     "commander": "^15.0.0",
     "follow-redirects": "^1.16.0",
@@ -58,6 +60,7 @@
     "rdfa-streaming-parser": "^3.0.2",
     "rdfjs-jelly": "^0.1.4",
     "rdfxml-streaming-parser": "^3.3.0",
+    "shacl-engine": "^1.1.2",
     "shaclc-parse": "^2.0.0",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",

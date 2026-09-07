@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ldfetch playground</title>
 <meta name="description" content="Fetch and stream Linked Data straight in your browser with ldfetch.">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,6 +40,7 @@
       <button type="button" class="example-chip" data-example="rdf-messages">RDF Message Log</button>
       <button type="button" class="example-chip" data-example="rdf-messages-large">Large Message Log</button>
       <button type="button" class="example-chip" data-example="shaclc">SHACL Compact</button>
+      <button type="button" class="example-chip" data-example="visualizations">Visualization showcase</button>
     </div>
   </div>
 
@@ -73,6 +75,31 @@
 
 <main class="layout">
   <p id="status" role="status" aria-live="polite">Ready.</p>
+
+  <section class="panel viewer" id="visualization-workbench" hidden aria-label="Explore the loaded Linked Data">
+    <div class="viewer-heading">
+      <div>
+        <h2>explore the data</h2>
+        <p class="viewer-scope" data-scope-status></p>
+      </div>
+      <div class="viewer-controls">
+        <label class="viewer-graph" data-graph-field hidden>
+          <span>Graph scope</span>
+          <select data-graph-scope><option value="">All graphs</option></select>
+        </label>
+        <label class="viewer-filter">
+          <span>Filter entities</span>
+          <input type="search" data-view-filter placeholder="Names, IRIs, values…" autocomplete="off">
+        </label>
+      </div>
+    </div>
+    <div class="view-tabs" role="tablist" aria-label="Available data views" data-view-tabs></div>
+    <div class="view-body" role="tabpanel" data-view-body></div>
+    <details class="entity-inspector" data-entity-inspector>
+      <summary>Selected entity and supporting statements</summary>
+      <div data-entity-details></div>
+    </details>
+  </section>
 
   <section class="panel output" id="output-panel" aria-label="TriG output">
     <h2><span id="output-title">trig output</span> <span class="hint" id="output-hint"></span></h2>

@@ -2,6 +2,7 @@
 
 var rdfWriter = require('rdf-writer-ts');
 var rdfParserTs = require('rdf-parser-ts');
+var visualizations = require('./visualizations');
 
 // Register common vocabularies up front so pretty RDF output can use compact
 // names. Prefixes declared by the fetched document are added to the list shown
@@ -24,7 +25,14 @@ var COMMON_PREFIXES = {
   as: 'https://www.w3.org/ns/activitystreams#',
   vcard: 'http://www.w3.org/2006/vcard/ns#',
   geo: 'http://www.w3.org/2003/01/geo/wgs84_pos#',
-  csvw: 'http://www.w3.org/ns/csvw#'
+  geosparql: 'http://www.opengis.net/ont/geosparql#',
+  csvw: 'http://www.w3.org/ns/csvw#',
+  dcat: 'http://www.w3.org/ns/dcat#',
+  qb: 'http://purl.org/linked-data/cube#',
+  sosa: 'http://www.w3.org/ns/sosa/',
+  oa: 'http://www.w3.org/ns/oa#',
+  vc: 'https://www.w3.org/2018/credentials#',
+  tree: 'https://w3id.org/tree#'
 };
 
 var DEFAULT_FRAME = {
@@ -97,6 +105,9 @@ var EXAMPLES = {
   // global auto-creation that only silently works in a non-strict context.
   shaclc: {
     url: 'https://raw.githubusercontent.com/jeswr/shaclcjs/main/__tests__/valid/basic-shape-with-targets.shaclc'
+  },
+  visualizations: {
+    url: new URL('examples/visualization-showcase.ttl', document.baseURI).href
   }
 };
 
@@ -121,7 +132,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var messageSlider = document.getElementById('message-slider');
   var messagePosition = document.getElementById('message-position');
   var loadMoreMessagesBtn = document.getElementById('load-more-messages');
+  var visualizationRoot = document.getElementById('visualization-workbench');
   var applyingHash = false;
+  var restoredMessagePosition = null;
 
   // Very large RDF Message logs shouldn't have to sit fully in memory just
   // to be browsed: messages are consumed from the live 'message' event (not
@@ -177,6 +190,10 @@ document.addEventListener('DOMContentLoaded', function () {
     lineWrapping: true
   });
 
+  var visualizationWorkbench = visualizations.createWorkbench(visualizationRoot, {
+    onStateChange: function () { updateHash(); }
+  });
+
   function updateFormatUi() {
     var format = OUTPUT_FORMATS[outputFormat.value] || OUTPUT_FORMATS.trig;
     var isJsonLd = outputFormat.value === 'jsonld';
@@ -191,12 +208,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function configurationHash() {
     var params = new URLSearchParams();
+    var visualizationState = visualizationWorkbench.getState();
     params.set('url', urlInput.value.trim());
     params.set('format', outputFormat.value);
     if (advanced.open) params.set('advanced', '1');
-    if (frameToggle.checked) {
-      params.set('frameEnabled', '1');
+    if (frameToggle.checked) params.set('frameEnabled', '1');
+    // Keep a user's edited frame shareable even while application of that
+    // frame is disabled; omit only the untouched default to keep normal URLs
+    // compact.
+    if (frameToggle.checked || frameCm.getValue() !== JSON.stringify(DEFAULT_FRAME, null, 2)) {
       params.set('frame', frameCm.getValue());
+    }
+    if (visualizationState.view && visualizationState.view !== 'overview') params.set('view', visualizationState.view);
+    if (visualizationState.filter) params.set('filter', visualizationState.filter);
+    if (visualizationState.entity) params.set('entity', visualizationState.entity);
+    if (visualizationState.graph) params.set('graph', visualizationState.graph);
+    if (restoredMessagePosition !== null) {
+      params.set('message', String(restoredMessagePosition));
+    } else if (!messagesPanel.hidden && currentMessages.length) {
+      params.set('message', String(windowStartIndex + parseInt(messageSlider.value, 10) + 1));
     }
     return '#' + params.toString();
   }
@@ -218,7 +248,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (OUTPUT_FORMATS[params.get('format')]) outputFormat.value = params.get('format');
     frameToggle.checked = params.get('frameEnabled') === '1';
     if (params.has('frame')) frameCm.setValue(params.get('frame'));
+    restoredMessagePosition = params.has('message') ? Math.max(1, parseInt(params.get('message'), 10) || 1) : null;
     advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked;
+    visualizationWorkbench.restoreState({
+      view: params.get('view') || 'overview',
+      filter: params.get('filter') || '',
+      entity: params.get('entity') || '',
+      graph: params.get('graph') || ''
+    });
     updateFormatUi();
     applyingHash = false;
     return true;
@@ -235,7 +272,17 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   advanced.addEventListener('toggle', updateHash);
-  urlInput.addEventListener('input', updateHash);
+  urlInput.addEventListener('input', function () {
+    // A message number belongs to the previously loaded URL and must not be
+    // carried into a different source while the user edits the address.
+    restoredMessagePosition = null;
+    messagesPanel.hidden = true;
+    var viewState = visualizationWorkbench.getState();
+    viewState.graph = '';
+    viewState.entity = '';
+    visualizationWorkbench.restoreState(viewState);
+    updateHash();
+  });
   frameCm.on('change', updateHash);
 
   document.querySelectorAll('.copy-btn').forEach(function (btn) {
@@ -311,6 +358,30 @@ document.addEventListener('DOMContentLoaded', function () {
     var maybeMore = pendingMessages.length > 0 || !fetchComplete || !!streamingReader;
     messagePosition.textContent = 'message ' + globalPosition + ' of ' + knownSoFar + (maybeMore ? '+' : '');
     messageCm.setValue(serializeMessage(currentMessages[index]));
+    visualizationWorkbench.setScope(currentMessages[index], COMMON_PREFIXES, 'message ' + globalPosition, false);
+    if (restoredMessagePosition === null) updateHash();
+  }
+
+  // Restore a message selected in a shared URL once its retained window is
+  // available. The very large streaming example deliberately does not fetch
+  // ahead without a user action merely to satisfy a distant hash position.
+  function restoreMessageSelection () {
+    if (restoredMessagePosition === null || !currentMessages.length) return false;
+    var relative = restoredMessagePosition - 1 - windowStartIndex;
+    var known = currentMessages.concat(pendingMessages);
+    if (relative < 0 || relative >= known.length) return false;
+    if (relative >= currentMessages.length) {
+      var windowOffset = Math.floor(relative / WINDOW_SIZE) * WINDOW_SIZE;
+      windowStartIndex += windowOffset;
+      currentMessages = known.slice(windowOffset, windowOffset + WINDOW_SIZE);
+      pendingMessages = known.slice(windowOffset + currentMessages.length);
+      relative -= windowOffset;
+      messageSlider.max = String(Math.max(0, currentMessages.length - 1));
+      updateLoadMoreVisibility();
+    }
+    restoredMessagePosition = null;
+    renderMessage(relative);
+    return true;
   }
 
   function updateLoadMoreVisibility () {
@@ -375,7 +446,10 @@ document.addEventListener('DOMContentLoaded', function () {
   function finishMessages () {
     fetchComplete = true;
     updateLoadMoreVisibility();
-    if (currentMessages.length) renderMessage(parseInt(messageSlider.value, 10));
+    if (currentMessages.length && !restoreMessageSelection()) {
+      restoredMessagePosition = null;
+      renderMessage(parseInt(messageSlider.value, 10));
+    }
   }
 
   // Feeds one parsed item (a plain quad or, in RDF Messages mode, a
@@ -441,7 +515,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return pumpStreamingMessages().then(function () {
       fetchComplete = streamingDone;
       updateLoadMoreVisibility();
-      if (currentMessages.length) renderMessage(parseInt(messageSlider.value, 10));
+      if (currentMessages.length && !restoreMessageSelection()) renderMessage(parseInt(messageSlider.value, 10));
       var total = windowStartIndex + currentMessages.length + pendingMessages.length;
       if (streamingDone) {
         setStatus('Done: reached the end of the stream, ' + total + ' messages total.');
@@ -465,6 +539,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // rather than lib/ldfetch.js's usual buffer-the-whole-response approach.
   function startStreamingExample (url) {
     resetMessages();
+    visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
     outputPanel.hidden = true;
     renderPrefixes({});
     setStatus('Connecting …');
@@ -497,6 +572,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   messageSlider.addEventListener('input', function () {
+    restoredMessagePosition = null;
     renderMessage(parseInt(messageSlider.value, 10));
   });
 
@@ -659,6 +735,7 @@ document.addEventListener('DOMContentLoaded', function () {
     outputPanel.hidden = false;
     renderPrefixes({});
     resetMessages();
+    visualizationWorkbench.reset(COMMON_PREFIXES, 'loaded document');
     setStatus('Fetching …');
 
     var fetcher = new window.ldfetch();
@@ -701,6 +778,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetcher.on('quad', function (quad) {
       if (messageModeDetected) return;
       quadCount++;
+      visualizationWorkbench.addQuad(quad);
       if (writer) writer.addQuad(quad);
       setStatus('Fetching … ' + quadCount + ' triple' + (quadCount === 1 ? '' : 's') + ' so far');
     });
@@ -708,6 +786,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!messageModeDetected) {
         messageModeDetected = true;
         outputCm.setValue('');
+        visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
       }
       quadCount += quadsInMessage.length;
       receiveMessage(quadsInMessage);
@@ -733,6 +812,8 @@ document.addEventListener('DOMContentLoaded', function () {
         fetchBtn.disabled = false;
         return;
       }
+
+      visualizationWorkbench.complete(response.triples, Object.assign({}, COMMON_PREFIXES, documentPrefixes), 'loaded document');
 
       if (formatName !== 'jsonld') {
         setStatus('Done: ' + response.triples.length + ' triples from ' + response.url);
@@ -772,6 +853,11 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     urlInput.value = example.url;
+    var viewState = visualizationWorkbench.getState();
+    viewState.graph = '';
+    viewState.entity = '';
+    visualizationWorkbench.restoreState(viewState);
+    restoredMessagePosition = null;
     // runFetch() itself checks STREAMING_URLS and routes accordingly, so
     // this works the same whether the URL got here via this click, a
     // restored #url=... link, or the user just pasting it in.
