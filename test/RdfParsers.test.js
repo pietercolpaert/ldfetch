@@ -172,6 +172,66 @@ test('RdfParsers extracts both RDFa and Microdata from HTML', async () => {
   assert.ok(objectValues.includes('from microdata'));
 });
 
+test('RdfParsers merges embedded JSON-LD <script> blocks with RDFa/Microdata from the same HTML page', async () => {
+  const html = '<html><body>' +
+    '<div vocab="https://example.org/" resource="https://example.org/rdfa-subject"><span property="p">from rdfa</span></div>' +
+    '<script type="application/ld+json" id="profile">' +
+    '{"@context": {"schema": "https://schema.org/"}, "@id": "https://example.org/jsonld-subject", "schema:name": "from json-ld"}' +
+    '</script>' +
+    '</body></html>';
+  const { triples } = await collect({
+    bodyText: html,
+    contentType: 'text/html',
+    baseIRI: 'https://example.org/'
+  });
+  const objectValues = triples.map((triple) => triple.object.value);
+  assert.ok(objectValues.includes('from rdfa'), 'RDFa is still extracted');
+  assert.ok(objectValues.includes('from json-ld'), 'the embedded JSON-LD script block is also extracted');
+});
+
+test('RdfParsers skips a malformed embedded JSON-LD <script> block without losing RDFa/other JSON-LD blocks', async () => {
+  const html = '<html><body>' +
+    '<div vocab="https://example.org/" resource="https://example.org/rdfa-subject"><span property="p">from rdfa</span></div>' +
+    '<script type="application/ld+json">{ this is not valid json }</script>' +
+    '<script type="application/ld+json">{"@id": "https://example.org/s2", "https://example.org/p": "still works"}</script>' +
+    '</body></html>';
+  const { triples } = await collect({
+    bodyText: html,
+    contentType: 'text/html',
+    baseIRI: 'https://example.org/'
+  });
+  const objectValues = triples.map((triple) => triple.object.value);
+  assert.ok(objectValues.includes('from rdfa'));
+  assert.ok(objectValues.includes('still works'));
+});
+
+test('RdfParsers resolves a remote @context referenced by an embedded JSON-LD <script> block', async () => {
+  const http = require('node:http');
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/ld+json' });
+    res.end(JSON.stringify({ '@context': { schema: 'https://schema.org/' } }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+
+  try {
+    const contextUrl = `http://127.0.0.1:${server.address().port}/context.jsonld`;
+    const html = '<html><body>' +
+      `<script type="application/ld+json">{"@context": "${contextUrl}", "@id": "https://example.org/s", "schema:name": "remote context resolved"}</script>` +
+      '</body></html>';
+    const { triples } = await collect({
+      bodyText: html,
+      contentType: 'text/html',
+      baseIRI: 'https://example.org/'
+    });
+    assert.ok(triples.some((triple) => triple.object.value === 'remote context resolved'));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('RdfParsers parses SHACL Compact syntax and reports its default prefixes', async () => {
   const shaclc = 'PREFIX ex: <https://example.org/test#>\n' +
     'shape ex:TestShape -> ex:TestClass {\n  targetNode=ex:TestNode .\n}';
