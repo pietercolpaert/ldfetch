@@ -8,12 +8,22 @@ const SCHEMA = ['https://schema.org/', 'http://schema.org/'];
 const CRS84 = 'http://www.opengis.net/def/crs/OGC/1.3/CRS84';
 const definitionFailures = new Map();
 
+// Keep frequently encountered projected CRSs usable offline. Other EPSG
+// definitions are still loaded on demand by resolveDefinitions().
+proj4.defs('EPSG:31370', '+proj=lcc +lat_0=90 +lon_0=4.36748666666667 +lat_1=51.1666672333333 +lat_2=49.8333339 +x_0=150000.013 +y_0=5400088.438 +ellps=intl +towgs84=-106.8686,52.2978,-103.7239,0.3366,-0.457,1.8422,-1.2747 +units=m +no_defs +type=crs');
+
+function epsgCode(crs) {
+  const match = String(crs).match(/^https?:\/\/www\.opengis\.net\/def\/crs\/EPSG\/[^/]+\/(\d+)\/?$/i);
+  return match ? match[1] : null;
+}
+
 async function resolveDefinitions(index, signal) {
   const codes = new Set();
   index.quads.forEach(q => {
     if (q.object.termType !== 'Literal') return;
-    const match = q.object.value.match(/^\s*<https?:\/\/www\.opengis\.net\/def\/crs\/EPSG\/0\/(\d+)>/);
-    if (match && !proj4.defs('EPSG:' + match[1]) && !definitionFailures.has(match[1])) codes.add(match[1]);
+    const iri = q.object.value.match(/^\s*<([^>]+)>/);
+    const code = iri && epsgCode(iri[1]);
+    if (code && !proj4.defs('EPSG:' + code) && !definitionFailures.has(code)) codes.add(code);
   });
   let changed = false;
   // Bound lookups for one scope; source coordinates never leave the browser.
@@ -57,11 +67,11 @@ function parseWkt(value) {
   const geometry = wkt.parse(match ? match[2] : value);
   if (!geometry) throw new Error('Invalid or unsupported WKT');
   let transform = p => p.slice();
-  if (/\/EPSG\/0\/4326$/.test(crs)) transform = p => [p[1], p[0]].concat(p.slice(2));
+  const epsg = epsgCode(crs);
+  if (epsg === '4326') transform = p => [p[1], p[0]].concat(p.slice(2));
   else if (crs !== CRS84 && !/\/CRS84$/.test(crs)) {
-    const epsg = crs.match(/\/EPSG\/0\/(\d+)$/);
-    if (!epsg || !proj4.defs('EPSG:' + epsg[1])) throw new Error('Unsupported CRS: ' + crs + (epsg && definitionFailures.has(epsg[1]) ? ' (' + definitionFailures.get(epsg[1]) + ')' : ''));
-    transform = p => proj4('EPSG:' + epsg[1], 'EPSG:4326').forward(p, true);
+    if (!epsg || !proj4.defs('EPSG:' + epsg)) throw new Error('Unsupported CRS: ' + crs + (epsg && definitionFailures.has(epsg) ? ' (' + definitionFailures.get(epsg) + ')' : ''));
+    transform = p => proj4('EPSG:' + epsg, 'EPSG:4326').forward(p, true);
   }
   return { geometry: transformGeometry(geometry, transform), crs };
 }

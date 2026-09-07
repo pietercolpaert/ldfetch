@@ -16,4 +16,5 @@ ex:mixed rdfs:label "A mixed geometry collection"; geo:asWKT "GEOMETRYCOLLECTION
 MESSAGE
 
 ex:latitudeFirst rdfs:label "EPSG:4326 axis order"; geo:asWKT "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT (50.85 4.35)"^^geo:wktLiteral .
+ex:lambert72 rdfs:label "Belgian Lambert 72 (EPSG:31370)"; geo:asWKT "<http://www.opengis.net/def/crs/EPSG/9.9.1/31370> POINT (148679.45 171066.81)"^^geo:wktLiteral .
 ex:unsupported rdfs:label "Unknown CRS remains inspectable"; geo:asWKT "<https://example.org/unknown-crs> POINT (123 456)"^^geo:wktLiteral .

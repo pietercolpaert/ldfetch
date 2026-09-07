@@ -13,6 +13,9 @@ test('WKT preserves collections and polygon holes and respects CRS axes', () => 
   assert.throws(() => parseWkt('POINT (4 150)'), /bounds/);
   const projected = parseWkt('<http://www.opengis.net/def/crs/EPSG/0/3857> POINT (0 0)').geometry.coordinates;
   assert.ok(Math.abs(projected[0]) < 0.00001 && Math.abs(projected[1]) < 0.00001);
+  const lambert72 = parseWkt('<http://www.opengis.net/def/crs/EPSG/9.9.1/31370> POINT (148679.45 171066.81)').geometry.coordinates;
+  assert.ok(Math.abs(lambert72[0] - 4.35) < 0.00001 && Math.abs(lambert72[1] - 50.85) < 0.00001);
+  assert.deepEqual(parseWkt('<https://www.opengis.net/def/crs/EPSG/9.9.1/4326> POINT (50 4)').geometry.coordinates, [4, 50]);
 });
 
 test('message scopes keep repeated subject coordinates separate', () => {

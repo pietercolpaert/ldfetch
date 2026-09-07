@@ -402,32 +402,33 @@ document.addEventListener('DOMContentLoaded', function () {
     // far -- either buffered ahead already, or the fetch is still running.
     var maybeMore = pendingMessages.length > 0 || !fetchComplete || !!streamingReader;
     messagePosition.textContent = 'message ' + globalPosition + ' of ' + knownSoFar + (maybeMore ? '+' : '');
-    var messages = messageScope.value === 'memory' ? currentMessages.concat(pendingMessages) : messageScope.value === 'window' ? currentMessages : [currentMessages[index]];
-    var groups = messages.map(function (quads, position) { return { quads: quads, message: messageScope.value === 'current' ? globalPosition : windowStartIndex + position + 1 }; });
-    var quads = messages.flat();
-    var label = messageScope.value === 'current' ? 'message ' + globalPosition : messages.length + ' retained messages (' + (windowStartIndex + 1) + '–' + (windowStartIndex + messages.length) + ')';
-    renderMessageOutput(messages, quads);
-    document.getElementById('message-output-scope').textContent = label;
+    var selectedMessage = currentMessages[index];
+    var exploreMessages = messageScope.value === 'memory' ? currentMessages.concat(pendingMessages) : messageScope.value === 'window' ? currentMessages : [selectedMessage];
+    var groups = exploreMessages.map(function (quads, position) { return { quads: quads, message: messageScope.value === 'current' ? globalPosition : windowStartIndex + position + 1 }; });
+    var exploreQuads = exploreMessages.flat();
+    var exploreLabel = messageScope.value === 'current' ? 'message ' + globalPosition : exploreMessages.length + ' retained messages (' + (windowStartIndex + 1) + '–' + (windowStartIndex + exploreMessages.length) + ')';
+    renderMessageOutput(selectedMessage);
+    document.getElementById('message-output-scope').textContent = 'message ' + globalPosition;
     outputPanel.hidden = true;
     messageOutputPanel.hidden = false;
-    visualizationWorkbench.setScope(quads, outputPrefixes, label, false, groups);
+    visualizationWorkbench.setScope(exploreQuads, outputPrefixes, exploreLabel, false, groups);
     if (restoredMessagePosition === null) updateHash();
   }
 
   var messageOutputRevision = 0;
-  function renderMessageOutput(messages, quads) {
+  function renderMessageOutput(message) {
     var revision = ++messageOutputRevision;
     messageCm.setOption('mode', OUTPUT_FORMATS[outputFormat.value].mode);
-    if (outputFormat.value !== 'jsonld') { messageCm.setValue(serializeMessage(quads)); return; }
+    if (outputFormat.value !== 'jsonld') { messageCm.setValue(serializeMessage(message)); return; }
     var converter = new window.ldfetch();
     if (!frameToggle.checked) {
-      messageCm.setValue(messages.map(function (message) { return JSON.stringify(converter.messageToJsonLd(message)); }).join('\n'));
+      messageCm.setValue(JSON.stringify(converter.messageToJsonLd(message)));
       return;
     }
     try {
       var frame = JSON.parse(frameCm.getValue());
       messageCm.setValue('Applying frame…');
-      converter.frame(quads, frame).then(function (value) {
+      converter.frame(message, frame).then(function (value) {
         if (revision === messageOutputRevision) messageCm.setValue(JSON.stringify(value, null, 2));
       }).catch(function (error) { if (revision === messageOutputRevision) messageCm.setValue('Could not apply frame: ' + error.message); });
     } catch (error) { messageCm.setValue('Invalid JSON-LD frame: ' + error.message); }
