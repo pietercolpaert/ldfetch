@@ -82,3 +82,73 @@ test('CLI rejects malformed URLs', async () => {
   const { code } = await runCli(['not-a-url']);
   assert.notEqual(code, 0);
 });
+
+test('CLI (issue #59) writes triples to stdout before the source has finished sending', async () => {
+  let serverFinished = false;
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.write('<https://example.org/alice> <http://xmlns.com/foaf/0.1/name> "first" .\n');
+    setTimeout(() => {
+      res.end('<https://example.org/alice> <http://xmlns.com/foaf/0.1/name> "second" .\n');
+      serverFinished = true;
+    }, 200);
+  });
+
+  try {
+    const { execFile } = require('node:child_process');
+    const child = execFile('node', [BIN, `${baseUrl}/log`]);
+    const sawFirstTripleBeforeServerFinished = await new Promise((resolve, reject) => {
+      let stdout = '';
+      child.stdout.on('data', chunk => {
+        stdout += chunk;
+        if (stdout.includes('"first"')) {
+          resolve(!serverFinished);
+        }
+      });
+      child.on('error', reject);
+      child.on('exit', () => resolve(false));
+    });
+    await new Promise(resolve => child.on('exit', resolve));
+
+    assert.equal(sawFirstTripleBeforeServerFinished, true);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('CLI --frame still buffers the whole response (framing needs the full graph)', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.end('<#me> a <https://schema.org/Person>; <https://schema.org/name> "Alice" .');
+  });
+
+  try {
+    const frame = JSON.stringify({ '@context': { schema: 'https://schema.org/' }, '@type': 'schema:Person' });
+    const { code, stdout } = await runCli([`${baseUrl}/profile`, '--frame', frame]);
+    assert.equal(code, 0);
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed['schema:name']['@value'], 'Alice');
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('CLI --predicates still follows links via the buffered path', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    if (req.url === '/start') {
+      res.writeHead(200, { 'content-type': 'text/turtle' });
+      res.end(`<https://example.org/a> <https://example.org/next> <${baseUrl}/next> .`);
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.end('<https://example.org/b> <https://schema.org/name> "followed" .');
+  });
+
+  try {
+    const { code, stdout } = await runCli([`${baseUrl}/start`, '--predicates', 'https://example.org/next']);
+    assert.equal(code, 0);
+    assert.match(stdout, /followed/);
+  } finally {
+    await closeServer(server);
+  }
+});

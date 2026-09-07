@@ -171,6 +171,54 @@ test('ldfetch fetches binary Jelly-RDF over real HTTP', async () => {
   }
 });
 
+test('ldfetch.getStream streams quads/messages live and resolves without a triples/messages array', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle; charset=utf-8' });
+    res.end('@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n@version "1.2-messages" .\n<#s> foaf:name "first" .\nMESSAGE\n<#s> foaf:name "second" .');
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    const quads = [];
+    const messages = [];
+    fetcher.on('quad', quad => quads.push(quad));
+    fetcher.on('message', message => messages.push(message));
+
+    const response = await fetcher.getStream(`${baseUrl}/log`);
+
+    assert.equal(quads.length, 2);
+    assert.equal(messages.length, 2);
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.url, `${baseUrl}/log`);
+    assert.equal(response.prefixes.foaf, 'http://xmlns.com/foaf/0.1/');
+    assert.equal(response.triples, undefined);
+    assert.equal(response.messages, undefined);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('ldfetch.getStream falls back to internally buffering formats with no incremental parser', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/ld+json; charset=utf-8' });
+    res.end(JSON.stringify({ '@id': 'https://example.org/alice', 'https://schema.org/name': 'Alice' }));
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    const quads = [];
+    fetcher.on('quad', quad => quads.push(quad));
+
+    const response = await fetcher.getStream(`${baseUrl}/profile`);
+
+    assert.equal(quads.length, 1);
+    assert.equal(quads[0].object.value, 'Alice');
+    assert.equal(response.statusCode, 200);
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('ldfetch.frame applies a JSON-LD frame to parsed triples', async () => {
   const { server, baseUrl } = await createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/turtle; charset=utf-8' });

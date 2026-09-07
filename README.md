@@ -29,6 +29,7 @@ Features for the NodeJS framework in specific:
 
 Features for the Command Line:
  * Writes data on any URL in TriG on stdout
+ * Streams that output as the source is being downloaded and parsed, rather than waiting for the whole thing -- so a multi-gigabyte RDF Message log starts printing triples immediately instead of after a full download (formats without an incremental parser -- JSON-LD, RDF/XML, HTML, SHACL Compact -- are still buffered internally; `--frame` and `--predicates` also require the whole response and fall back to buffering)
  * Extra features to automatically follow links (see `ldfetch --help` after `npm install -g ldfetch`)
 
 ## How to use it
@@ -106,6 +107,20 @@ The response object will look like this:
 }
 ```
 `prefixes` merges what you registered with `addPrefix` and whatever the source document declares itself. `messages` is only populated for RDF Message-framed sources (see Features above) -- each entry is the array of quads belonging to one message.
+
+#### Streaming large sources with `getStream`
+
+For sources too large to hold in memory (the CLI uses this internally, see Features above), `getStream` never accumulates `triples`/`messages` at all -- consume `quad`/`message`/`prefix` events on the fetcher as they arrive instead:
+
+```javascript
+let fetch = new ldfetch({});
+fetch.on('quad', quad => console.log(quad));
+fetch.on('message', quadsInMessage => console.log('message with', quadsInMessage.length, 'quads'));
+let response = await fetch.getStream('https://example.org/huge-rdf-message-log.nt');
+console.log('done, saw prefixes:', response.prefixes);
+```
+
+Only content types with a genuine incremental parser (Turtle, TriG, N-Triples, N-Quads and Jelly-RDF) actually stream this way; anything else (JSON-LD, RDF/XML, HTML, SHACL Compact) is buffered internally from the same connection and parsed as usual, still without a `triples`/`messages` array in the resolved response -- only available in the Node.js version, not in the browser bundle.
 
 ## License and copyright
 
