@@ -1,0 +1,19 @@
+VERSION "1.2-messages"
+PREFIX ex: <https://example.org/globe/>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+ex:brussels rdfs:label "Brussels"; geo:hasGeometry ex:cityGeometry .
+ex:cityGeometry geo:asWKT "POINT (4.35 50.85)"^^geo:wktLiteral .
+ex:route rdfs:label "European route"; geo:asWKT "LINESTRING (-0.12 51.5, 2.35 48.85, 4.35 50.85)"^^geo:wktLiteral .
+ex:area rdfs:label "Area with a hole"; geo:asWKT "POLYGON ((0 45, 10 45, 10 55, 0 55, 0 45), (3 48, 3 52, 7 52, 7 48, 3 48))"^^geo:wktLiteral .
+
+MESSAGE
+
+ex:cities rdfs:label "Cities around the world"; geo:asWKT "MULTIPOINT ((-74 40.7), (139.7 35.7), (151.2 -33.9))"^^geo:wktLiteral .
+ex:mixed rdfs:label "A mixed geometry collection"; geo:asWKT "GEOMETRYCOLLECTION (POINT (-43 -22), LINESTRING (-70 -20, -45 -10))"^^geo:wktLiteral .
+
+MESSAGE
+
+ex:latitudeFirst rdfs:label "EPSG:4326 axis order"; geo:asWKT "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT (50.85 4.35)"^^geo:wktLiteral .
+ex:unsupported rdfs:label "Unknown CRS remains inspectable"; geo:asWKT "<https://example.org/unknown-crs> POINT (123 456)"^^geo:wktLiteral .

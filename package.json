@@ -9,6 +9,7 @@
   "main": "lib/ldfetch.js",
   "scripts": {
     "test": "node --test test/*.test.js",
+    "test:playground": "npm run build:site && node test/playground-browser.cjs",
     "build": "node build/build.js",
     "build:playground": "node build/build-playground.js",
     "build:site": "npm run build && npm run build:playground && node build/assemble-site.js",
@@ -72,6 +73,9 @@
     "./lib/NodeHttpFetcher.js": "./lib/BrowserHttpFetcher.js"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "maplibre-gl": "^6.7.0",
+    "proj4": "^2.22.0",
+    "wellknown": "^0.5.0"
   }
 }

@@ -1,4 +1,5 @@
 'use strict';
+var geospatial = require('./geospatial');
 
 var RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 var RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
@@ -421,30 +422,17 @@ function credentialsModule() {
 }
 
 function geographyModule() {
-  function points(index) {
-    var result = [];
-    index.entities.forEach(function (entity) {
-      var lat = parseFloat(firstValue(index, entity, GEO + 'lat'));
-      var lon = parseFloat(firstValue(index, entity, [GEO + 'long', GEO + 'lon']));
-      if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) result.push({ entity: entity, lat: lat, lon: lon });
-      index.values(entity, GEOSPARQL + 'asWKT').forEach(function (term) {
-        var match = term.value.match(/^\s*(?:<[^>]+>\s*)?POINT\s*(?:Z\s*)?\(\s*([-+\d.eE]+)\s+([-+\d.eE]+)/i);
-        if (match) result.push({ entity: entity, lon: Number(match[1]), lat: Number(match[2]) });
-      });
-    });
-    return result.filter(function (point) { return isFinite(point.lat) && isFinite(point.lon) && Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180; });
-  }
   return {
-    id: 'map', title: 'Map', priority: 800,
-    detect: function (index) { var found = points(index); return { useful: found.length > 0, count: found.length }; },
-    render: function (index) {
-      var found = points(index);
-      var marks = found.map(function (point) {
-        var x = 2.5 + ((point.lon + 180) / 360) * 95;
-        var y = 5 + ((90 - point.lat) / 180) * 90;
-        return '<button type="button" class="map-point" data-entity="' + esc(termKey(point.entity.term)) + '" style="left:' + x.toFixed(2) + '%;top:' + y.toFixed(2) + '%" title="' + esc(index.label(point.entity) + ' (' + point.lat + ', ' + point.lon + ')') + '"><span></span></button>';
-      }).join('');
-      return '<div class="simple-map" role="img" aria-label="World overview containing ' + found.length + ' points"><div class="map-graticule"></div>' + marks + '</div><div class="map-list">' + found.map(function (point) { return '<p>' + termHtml(index, point.entity.term) + ' <span>' + esc(point.lat + ', ' + point.lon) + '</span></p>'; }).join('') + '</div><p class="view-note">Point preview. Full GeoSPARQL geometry, globe, and CRS transformation support are planned.</p>';
+    id: 'map', title: 'Geospatial', priority: 950,
+    detect: function (index) { var data = geospatial.extract(index); return { useful: data.features.length + data.issues.length > 0, count: data.features.length }; },
+    render: function (index, state) {
+      var data = geospatial.extract(index);
+      if (state.filter) data.features = data.features.filter(function (f) { return (f.properties.label + ' ' + f.properties.source).toLowerCase().includes(state.filter.toLowerCase()); });
+      state.mapData = data;
+      return '<div class="globe-view"><div class="view-actions"><button class="action-button" data-globe-home>Whole Earth</button><button class="action-button secondary" data-globe-fit>Fit geometries</button></div><div class="globe" data-globe aria-label="Interactive spherical Earth"></div><p data-map-status role="status">Loading globe…</p></div>' +
+        '<div class="geometry-list"><h3>' + data.features.length + ' geometries in this scope</h3>' + data.features.map(function (f) {
+          return '<p><button class="entity-link" data-entity="' + esc(f.properties.entity) + '">' + esc(f.properties.label) + '</button> · ' + esc(f.geometry.type) + (f.properties.message !== null ? ' · message ' + f.properties.message : '') + '</p>';
+        }).join('') + '</div>' + (data.issues.length ? '<details class="geometry-issues"><summary>' + data.issues.length + ' geometries could not be plotted</summary>' + data.issues.map(function (issue) { return '<p><button class="entity-link" data-entity="' + esc(issue.entity) + '">Inspect source</button> ' + esc(issue.reason) + '</p>'; }).join('') + '</details>' : '');
     }
   };
 }
@@ -581,7 +569,7 @@ function iiifModule() {
     return null;
   }
   return {
-    id: 'iiif', title: 'Presentation', priority: 840,
+    id: 'iiif', title: 'IIIF Presentation', priority: 980,
     detect: function (index) { var found = resources(index); return { useful: found.length > 0, count: found.length }; },
     render: function (index) {
       var canvases = index.entitiesOfType(IIIF + 'Canvas');
@@ -732,14 +720,29 @@ function detectAvailable(index, registry) {
   }).filter(function (item) { return item.result.useful; }).sort(function (a, b) { return (b.module.priority || 0) - (a.module.priority || 0); });
 }
 
+function rankViews(available) {
+  var ids = available.map(function (item) { return item.module.id; });
+  var secondary = ['overview', 'relationships', 'profile', 'forms', 'statistics'];
+  if (ids.includes('iiif')) secondary.push('images');
+  if (ids.includes('credentials')) secondary.push('profiles');
+  if (ids.includes('sensors')) secondary.push('timeline');
+  var primary = available.filter(function (item) { return !secondary.includes(item.module.id); }).slice(0, 4);
+  return { primary: primary, more: available.filter(function (item) { return !primary.includes(item); }) };
+}
+
 function createWorkbench(root, options) {
   options = options || {};
   var registry = options.registry || createRegistry();
   var index = new DatasetIndex();
   var allIndex = index;
-  var state = { view: 'overview', filter: '', entity: '', graph: '', partial: false, scopeLabel: 'loaded document' };
+  var state = { view: '', filter: '', entity: '', graph: '', partial: false, scopeLabel: 'loaded document' };
   var renderTimer = null;
   var disposed = false;
+  var visible = false;
+  var unmount = null;
+  var definitionAbort = null;
+
+  function cleanup() { if (definitionAbort) { definitionAbort.abort(); definitionAbort = null; } if (unmount) { unmount(); unmount = null; } }
 
   function notify() { if (options.onStateChange) options.onStateChange(getState()); }
 
@@ -750,8 +753,19 @@ function createWorkbench(root, options) {
 
   function render() {
     if (disposed) return;
-    root.hidden = allIndex.quads.length === 0;
+    var available = detectAvailable(index, registry);
+    var ranked = rankViews(available);
+    if (options.onAvailable) options.onAvailable(ranked.primary.length);
+    root.hidden = !visible;
     if (root.hidden) return;
+    if (!allIndex.quads.length) {
+      cleanup();
+      root.querySelector('[data-view-tabs]').innerHTML = '';
+      root.querySelector('[data-more-views]').innerHTML = '';
+      root.querySelector('[data-view-body]').innerHTML = '<p>No triples in this scope yet.</p>';
+      root.querySelector('[data-scope-status]').textContent = state.scopeLabel;
+      return;
+    }
     var graphField = root.querySelector('[data-graph-field]');
     var graphSelect = root.querySelector('[data-graph-scope]');
     var graphTerms = Array.from(allIndex.graphs.entries());
@@ -760,24 +774,54 @@ function createWorkbench(root, options) {
       return '<option value="' + esc(entry[0]) + '">' + esc(allIndex.label(entry[1])) + '</option>';
     }).join('');
     graphSelect.value = state.graph;
-    var available = detectAvailable(index, registry);
     var ids = available.map(function (item) { return item.module.id; });
-    if (ids.indexOf(state.view) === -1) state.view = 'overview';
+    if (!state.view || ids.indexOf(state.view) === -1) state.view = ranked.primary.length ? ranked.primary[0].module.id : 'overview';
     var active = available.find(function (item) { return item.module.id === state.view; }) || available[0];
-    var tabs = available.map(function (item) {
+    var primary = ranked.primary.slice();
+    if (!primary.includes(active)) primary.push(active);
+    var tabs = primary.map(function (item) {
       var selected = item.module.id === state.view;
       var count = item.result.count ? '<span>' + item.result.count + '</span>' : '';
       return '<button type="button" role="tab" id="viewer-tab-' + esc(item.module.id) + '" aria-controls="viewer-active-panel" aria-selected="' + selected + '" tabindex="' + (selected ? '0' : '-1') + '" data-view="' + esc(item.module.id) + '">' + esc(item.module.title) + count + '</button>';
     }).join('');
     root.querySelector('[data-view-tabs]').innerHTML = tabs;
+    var more = ranked.more.filter(function (item) { return item !== active; });
+    root.querySelector('[data-more-views]').innerHTML = more.map(function (item) { return '<button type="button" data-view="' + esc(item.module.id) + '">' + esc(item.module.title) + '</button>'; }).join('');
+    root.querySelector('.more-views').hidden = !more.length;
     var graphStatus = state.graph && allIndex.graphs.get(state.graph) ? ' · graph ' + allIndex.label(allIndex.graphs.get(state.graph)) : '';
     root.querySelector('[data-scope-status]').textContent = state.scopeLabel + graphStatus + (state.partial ? ' · loading, results are partial' : ' · complete');
     var body = root.querySelector('[data-view-body]');
     body.id = 'viewer-active-panel';
     body.setAttribute('aria-labelledby', 'viewer-tab-' + active.module.id);
     root.setAttribute('aria-busy', state.partial ? 'true' : 'false');
-    try { body.innerHTML = active.module.render(index, state); }
+    var retainedGlobe = active.module.id === 'map' && unmount && unmount.update ? body.querySelector('.globe-view') : null;
+    if (!retainedGlobe) cleanup();
+    try {
+      var html = active.module.render(index, state);
+      if (retainedGlobe) {
+        var updated = document.createElement('div'); updated.innerHTML = html;
+        updated.querySelector('.globe-view').replaceWith(retainedGlobe);
+        body.replaceChildren.apply(body, Array.from(updated.childNodes));
+        unmount.update(state.mapData);
+      } else body.innerHTML = html;
+      if (active.module.id === 'map' && !retainedGlobe) {
+        var removeMap = geospatial.mount(body.querySelector('[data-globe]'), state.mapData, function (entity) {
+          state.entity = entity; updateInspector(); notify();
+        }, state.camera, function (camera) { state.camera = camera; notify(); });
+        unmount = removeMap;
+        unmount.update = removeMap.update;
+      }
+      if (active.module.id === 'map') {
+        if (definitionAbort) definitionAbort.abort();
+        var abort = new AbortController(); definitionAbort = abort;
+        geospatial.resolveDefinitions(index, abort.signal).then(function (changed) { if (changed && !abort.signal.aborted) render(); });
+      }
+    }
     catch (error) { body.innerHTML = '<div class="view-error"><h3>This view could not be rendered</h3><p>' + esc(error.message || error) + '</p></div>'; }
+    updateInspector();
+  }
+
+  function updateInspector() {
     var selectedEntity = index.entity(state.entity);
     root.querySelector('[data-entity-details]').innerHTML = detailsHtml(index, selectedEntity);
     root.querySelector('[data-entity-inspector]').open = !!selectedEntity;
@@ -787,12 +831,14 @@ function createWorkbench(root, options) {
     if (!state.graph) { index = allIndex; return; }
     index = new DatasetIndex(allIndex.prefixes);
     index.addAll(allIndex.quads.filter(function (quad) { return termKey(quad.graph) === state.graph; }));
+    if (allIndex.messageGroups) index.messageGroups = allIndex.messageGroups.map(function (group) { return { message: group.message, quads: group.quads.filter(function (q) { return termKey(q.graph) === state.graph; }) }; });
   }
 
   function reset(prefixes, scopeLabel) {
     allIndex = new DatasetIndex(prefixes);
     index = state.graph ? new DatasetIndex(prefixes) : allIndex;
-    state.entity = '';
+    cleanup();
+    state.validationHtml = '';
     state.partial = true;
     state.scopeLabel = scopeLabel || 'loaded document';
     root.hidden = true;
@@ -829,21 +875,21 @@ function createWorkbench(root, options) {
       return;
     }
     var tab = event.target.closest('[data-view]');
-    if (tab) { state.view = tab.dataset.view; render(); notify(); return; }
+    if (tab) { state.view = tab.dataset.view; root.querySelector('.more-views').open = false; render(); var focused = root.querySelector('#viewer-tab-' + state.view); if (focused) focused.focus(); notify(); return; }
     var entityTarget = event.target.closest('[data-entity], [data-select-entity]');
     if (entityTarget) {
       state.entity = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
-      render(); notify();
+      updateInspector(); notify();
     }
   });
 
   root.addEventListener('keydown', function (event) {
     var tab = event.target.closest('[data-view]');
     if (!tab || ['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(event.key) === -1) return;
-    var tabs = Array.from(root.querySelectorAll('[data-view]'));
+    var tabs = Array.from(root.querySelectorAll('[role="tab"]'));
     var current = tabs.indexOf(tab);
     var next = event.key === 'Home' ? 0 : (event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length);
-    tabs[next].focus(); tabs[next].click(); event.preventDefault();
+    tabs[next].click(); event.preventDefault(); event.stopPropagation();
   });
 
   root.addEventListener('error', function (event) {
@@ -865,7 +911,7 @@ function createWorkbench(root, options) {
     notify();
   });
 
-  function getState() { return { view: state.view, filter: state.filter, entity: state.entity, graph: state.graph }; }
+  function getState() { return { view: state.view, filter: state.filter, entity: state.entity, graph: state.graph, camera: state.camera }; }
 
   function validateShacl() {
     state.validationHtml = '<div class="validation-result pending">Loading the SHACL engine…</div>';
@@ -902,7 +948,8 @@ function createWorkbench(root, options) {
 
   function restoreState(next) {
     if (!next) return;
-    if (next.view) state.view = next.view;
+    state.view = next.view || '';
+    state.camera = next.camera;
     state.filter = next.filter || '';
     state.entity = next.entity || '';
     state.graph = next.graph || '';
@@ -914,8 +961,9 @@ function createWorkbench(root, options) {
   return {
     reset: reset, addQuad: addQuad, complete: complete, render: render,
     getState: getState, restoreState: restoreState,
-    setScope: function (quads, prefixes, label, partial) { allIndex = new DatasetIndex(prefixes); allIndex.addAll(quads); applyGraphScope(); state.scopeLabel = label; state.partial = !!partial; render(); },
-    dispose: function () { disposed = true; if (renderTimer) clearTimeout(renderTimer); root.innerHTML = ''; }
+    setVisible: function (next) { visible = next; if (!visible) cleanup(); render(); },
+    setScope: function (quads, prefixes, label, partial, groups) { allIndex = new DatasetIndex(prefixes); allIndex.addAll(quads); allIndex.messageGroups = groups; applyGraphScope(); state.validationHtml = ''; state.scopeLabel = label; state.partial = !!partial; schedule(); },
+    dispose: function () { disposed = true; cleanup(); if (renderTimer) clearTimeout(renderTimer); root.innerHTML = ''; }
   };
 }
 
@@ -923,6 +971,7 @@ module.exports = {
   DatasetIndex: DatasetIndex,
   createRegistry: createRegistry,
   detectAvailable: detectAvailable,
+  rankViews: rankViews,
   createWorkbench: createWorkbench,
   termKey: termKey
 };

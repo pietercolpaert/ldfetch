@@ -108,6 +108,9 @@ var EXAMPLES = {
   },
   visualizations: {
     url: new URL('examples/visualization-showcase.ttl', document.baseURI).href
+  },
+  geospatial: {
+    url: new URL('examples/geospatial-messages.trig', document.baseURI).href
   }
 };
 
@@ -134,6 +137,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var loadMoreMessagesBtn = document.getElementById('load-more-messages');
   var visualizationRoot = document.getElementById('visualization-workbench');
   var applyingHash = false;
+  var activePane = 'triples';
+  var messageScope = document.getElementById('message-scope');
+  var messageOutputPanel = document.getElementById('message-output-panel');
   var restoredMessagePosition = null;
 
   // Very large RDF Message logs shouldn't have to sit fully in memory just
@@ -191,7 +197,30 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   var visualizationWorkbench = visualizations.createWorkbench(visualizationRoot, {
-    onStateChange: function () { updateHash(); }
+    onStateChange: function () { updateHash(); },
+    onAvailable: function (count) { document.getElementById('explore-tab').textContent = count ? 'Explore (' + count + ')' : 'Explore'; }
+  });
+
+  function showPane() {
+    document.getElementById('triples-pane').hidden = activePane !== 'triples';
+    visualizationWorkbench.setVisible(activePane === 'explore');
+    document.querySelectorAll('[data-pane]').forEach(function (button) {
+      button.setAttribute('aria-selected', String(button.dataset.pane === activePane));
+      button.tabIndex = button.dataset.pane === activePane ? 0 : -1;
+    });
+    if (activePane === 'triples') { outputCm.refresh(); messageCm.refresh(); }
+  }
+  document.querySelector('.result-tabs').addEventListener('click', function (event) {
+    var button = event.target.closest('[data-pane]');
+    if (!button) return;
+    activePane = button.dataset.pane; showPane(); updateHash();
+  });
+  document.querySelector('.result-tabs').addEventListener('keydown', function (event) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    var target = event.key === 'Home' ? 'triples' : event.key === 'End' ? 'explore' : activePane === 'triples' ? 'explore' : 'triples';
+    document.querySelector('[data-pane="' + target + '"]').click();
+    document.querySelector('[data-pane="' + target + '"]').focus();
+    event.preventDefault(); event.stopPropagation();
   });
 
   function updateFormatUi() {
@@ -211,6 +240,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var visualizationState = visualizationWorkbench.getState();
     params.set('url', urlInput.value.trim());
     params.set('format', outputFormat.value);
+    if (activePane === 'explore') params.set('pane', 'explore');
+    if (messageScope.value !== 'current') params.set('scope', messageScope.value);
+    if (visualizationState.camera) params.set('camera', visualizationState.camera.map(function (v) { return Number(v.toFixed(5)); }).join(','));
     if (advanced.open) params.set('advanced', '1');
     if (frameToggle.checked) params.set('frameEnabled', '1');
     // Keep a user's edited frame shareable even while application of that
@@ -244,6 +276,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var params = new URLSearchParams(window.location.hash.slice(1));
     applyingHash = true;
+    activePane = params.get('pane') === 'explore' ? 'explore' : 'triples';
+    messageScope.value = ['window', 'memory'].includes(params.get('scope')) ? params.get('scope') : 'current';
+    var camera = (params.get('camera') || '').split(',').map(Number);
+    if (camera.length !== 3 || !camera.every(Number.isFinite) || Math.abs(camera[0]) > 180 || Math.abs(camera[1]) > 90 || camera[2] < 0 || camera[2] > 22) camera = undefined;
     if (params.has('url')) urlInput.value = params.get('url');
     if (OUTPUT_FORMATS[params.get('format')]) outputFormat.value = params.get('format');
     frameToggle.checked = params.get('frameEnabled') === '1';
@@ -251,23 +287,27 @@ document.addEventListener('DOMContentLoaded', function () {
     restoredMessagePosition = params.has('message') ? Math.max(1, parseInt(params.get('message'), 10) || 1) : null;
     advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked;
     visualizationWorkbench.restoreState({
-      view: params.get('view') || 'overview',
+      view: params.get('view') || '',
       filter: params.get('filter') || '',
       entity: params.get('entity') || '',
-      graph: params.get('graph') || ''
+      graph: params.get('graph') || '',
+      camera: camera
     });
     updateFormatUi();
+    showPane();
     applyingHash = false;
     return true;
   }
 
   outputFormat.addEventListener('change', function () {
     updateFormatUi();
+    if (currentMessages.length) renderMessage(parseInt(messageSlider.value, 10));
     updateHash();
   });
 
   frameToggle.addEventListener('change', function () {
     updateFormatUi();
+    if (currentMessages.length) renderMessage(parseInt(messageSlider.value, 10));
     updateHash();
   });
 
@@ -332,11 +372,10 @@ document.addEventListener('DOMContentLoaded', function () {
     prefixCount.textContent = names.length ? '(' + names.length + ')' : '';
   }
 
-  // Renders one RDF Message's quads as TriG, independent of the main output
-  // format -- messages are raw event/diff-style data, not documents, so
-  // JSON-LD framing doesn't apply here.
+  // Serialize the selected message scope in the chosen RDF syntax. JSON-LD
+  // and optional framing are handled by renderMessageOutput below.
   function serializeMessage (quads) {
-    var writer = new rdfWriter.Writer({ format: 'TriG', prefixes: COMMON_PREFIXES });
+    var writer = new rdfWriter.Writer({ format: outputFormat.value === 'nquads' ? 'N-Quads' : 'TriG', prefixes: COMMON_PREFIXES });
     writer.addQuads(quads);
     var output = '';
     writer.end(function (error, result) { output = result; });
@@ -357,9 +396,35 @@ document.addEventListener('DOMContentLoaded', function () {
     // far -- either buffered ahead already, or the fetch is still running.
     var maybeMore = pendingMessages.length > 0 || !fetchComplete || !!streamingReader;
     messagePosition.textContent = 'message ' + globalPosition + ' of ' + knownSoFar + (maybeMore ? '+' : '');
-    messageCm.setValue(serializeMessage(currentMessages[index]));
-    visualizationWorkbench.setScope(currentMessages[index], COMMON_PREFIXES, 'message ' + globalPosition, false);
+    var messages = messageScope.value === 'memory' ? currentMessages.concat(pendingMessages) : messageScope.value === 'window' ? currentMessages : [currentMessages[index]];
+    var groups = messages.map(function (quads, position) { return { quads: quads, message: messageScope.value === 'current' ? globalPosition : windowStartIndex + position + 1 }; });
+    var quads = messages.flat();
+    var label = messageScope.value === 'current' ? 'message ' + globalPosition : messages.length + ' retained messages (' + (windowStartIndex + 1) + '–' + (windowStartIndex + messages.length) + ')';
+    renderMessageOutput(messages, quads);
+    document.getElementById('message-output-scope').textContent = label;
+    outputPanel.hidden = true;
+    messageOutputPanel.hidden = false;
+    visualizationWorkbench.setScope(quads, COMMON_PREFIXES, label, false, groups);
     if (restoredMessagePosition === null) updateHash();
+  }
+
+  var messageOutputRevision = 0;
+  function renderMessageOutput(messages, quads) {
+    var revision = ++messageOutputRevision;
+    messageCm.setOption('mode', OUTPUT_FORMATS[outputFormat.value].mode);
+    if (outputFormat.value !== 'jsonld') { messageCm.setValue(serializeMessage(quads)); return; }
+    var converter = new window.ldfetch();
+    if (!frameToggle.checked) {
+      messageCm.setValue(messages.map(function (message) { return JSON.stringify(converter.messageToJsonLd(message)); }).join('\n'));
+      return;
+    }
+    try {
+      var frame = JSON.parse(frameCm.getValue());
+      messageCm.setValue('Applying frame…');
+      converter.frame(quads, frame).then(function (value) {
+        if (revision === messageOutputRevision) messageCm.setValue(JSON.stringify(value, null, 2));
+      }).catch(function (error) { if (revision === messageOutputRevision) messageCm.setValue('Could not apply frame: ' + error.message); });
+    } catch (error) { messageCm.setValue('Invalid JSON-LD frame: ' + error.message); }
   }
 
   // Restore a message selected in a shared URL once its retained window is
@@ -409,11 +474,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Resets all message-window state for a new fetch.
   function resetMessages () {
+    messageOutputRevision++;
+    if (messageRenderTimer) { clearTimeout(messageRenderTimer); messageRenderTimer = null; }
     currentMessages = [];
     pendingMessages = [];
     windowStartIndex = 0;
     fetchComplete = false;
     messagesPanel.hidden = true;
+    messageOutputPanel.hidden = true;
     loadMoreMessagesBtn.hidden = true;
     resetStreamingSession();
   }
@@ -433,10 +501,11 @@ document.addEventListener('DOMContentLoaded', function () {
         renderMessage(0);
         messageCm.refresh();
       } else {
-        renderMessage(parseInt(messageSlider.value, 10));
+        scheduleMessageRender();
       }
     } else {
       pendingMessages.push(quadsInMessage);
+      if (messageScope.value === 'memory') scheduleMessageRender();
       updateLoadMoreVisibility();
     }
   }
@@ -575,6 +644,12 @@ document.addEventListener('DOMContentLoaded', function () {
     restoredMessagePosition = null;
     renderMessage(parseInt(messageSlider.value, 10));
   });
+  messageScope.addEventListener('change', function () { renderMessage(parseInt(messageSlider.value, 10)); updateHash(); });
+  var messageRenderTimer = null;
+  function scheduleMessageRender() {
+    if (messageRenderTimer) return;
+    messageRenderTimer = setTimeout(function () { messageRenderTimer = null; renderMessage(parseInt(messageSlider.value, 10)); }, 150);
+  }
 
   loadMoreMessagesBtn.addEventListener('click', function () {
     windowStartIndex += currentMessages.length;
@@ -600,7 +675,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     var target = event.target;
     var tag = target && target.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (target && (target.isContentEditable || target.closest('[data-globe], [role="tablist"]')))) return;
     event.preventDefault();
     renderMessage(parseInt(messageSlider.value, 10) + (event.key === 'ArrowRight' ? 1 : -1));
   });
