@@ -32,6 +32,16 @@ const puppeteer = require('puppeteer-core');
       res.end('VERSION "1.2-messages"\nPREFIX geo: <http://www.opengis.net/ont/geosparql#>\n' + Array.from({ length: 1002 }, (_, i) => '<https://example.org/repeated> geo:asWKT "POINT (' + (i % 170) + ' 20)"^^geo:wktLiteral .').join('\nMESSAGE\n'));
       return;
     }
+    if (req.url === '/ldes.ttl') {
+      res.setHeader('Content-Type', 'text/turtle');
+      res.end('@prefix ldes: <https://w3id.org/ldes#>. @prefix tree: <https://w3id.org/tree#>. @prefix xsd: <http://www.w3.org/2001/XMLSchema#>. <http://127.0.0.1:' + server.address().port + '/ldes.ttl#stream> a ldes:EventStream; tree:view <http://127.0.0.1:' + server.address().port + '/ldes.ttl#page>. <http://127.0.0.1:' + server.address().port + '/ldes.ttl#page> tree:relation [ a tree:GreaterThanOrEqualToRelation; tree:path <https://example.org/time>; tree:value "2026-01-01"^^xsd:date; tree:node <http://127.0.0.1:' + server.address().port + '/next.ttl> ].');
+      return;
+    }
+    if (req.url === '/next.ttl') {
+      res.setHeader('Content-Type', 'text/turtle');
+      res.end('<https://example.org/member> <http://www.w3.org/2000/01/rdf-schema#label> "Loaded next page".');
+      return;
+    }
     const file = path.join(root, decodeURIComponent(new URL(req.url, 'http://localhost').pathname));
     const target = file === root + '/' ? path.join(root, 'index.html') : file;
     const ext = path.extname(target);
@@ -48,6 +58,12 @@ const puppeteer = require('puppeteer-core');
     const base = 'http://127.0.0.1:' + server.address().port + '/';
     await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/geospatial-messages.trig'));
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    assert.equal(await page.$$eval('#examples-list > .example-chip', nodes => nodes.length), 3, 'Only a minimal set of examples stays visible');
+    await page.click('#more-examples > summary');
+    assert.ok(await page.$$eval('.example-menu h3', nodes => nodes.map(node => node.textContent).includes('Hypermedia controls')));
+    assert.ok(await page.$('[data-example="mol-ldes"]'));
+    assert.ok(await page.$('[data-example="riverbench-weather"]'));
+    await page.click('#more-examples > summary');
     await page.waitForFunction(() => document.querySelector('#explore-tab').textContent === 'Explore (1)');
     assert.equal(await page.$eval('#triples-pane', el => el.hidden), false);
     assert.equal(await page.$eval('#visualization-workbench', el => el.hidden), true);
@@ -90,6 +106,26 @@ const puppeteer = require('puppeteer-core');
     assert.ok(await page.$('[data-more-views] [data-view="images"]'));
     assert.equal(await page.$('[data-view-tabs] [data-view="images"]'), null);
     assert.ok((await page.$eval('[data-view="iiif"]', el => el.textContent)).includes('IIIF Presentation'));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/mol-tss-readings.trig') + '&pane=explore&view=timeseries');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('mol-tss-readings.trig'));
+    await page.waitForSelector('.time-series-point[data-point-id="stage-1215"]');
+    assert.equal(await page.$eval('.time-series-point[data-point-id="stage-1215"]', el => el.dataset.value), '29.66');
+    assert.ok(await page.$eval('.time-series-point[data-point-id="stage-1215"] title', el => el.textContent.includes('2020-11-07T12:15:00')));
+    await page.click('#more-examples > summary');
+    await page.click('[data-example="riverbench-weather"]');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('riverbench-weather-sample.trig'));
+    await page.waitForSelector('.time-series-point');
+    assert.equal(await page.$eval('#message-scope', el => el.value), 'memory');
+    assert.ok(page.url().includes('scope=memory'));
+    assert.ok(await page.$eval('.time-series-list', el => el.textContent.includes('air-temperature')));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'ldes.ttl') + '&pane=explore&view=hypermedia');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/ldes.ttl'));
+    assert.ok(await page.$eval('.relation-controls', el => el.textContent.includes('2026-01-01')));
+    await page.click('.relation-controls [data-load-url]');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/next.ttl'));
+    assert.ok(page.url().includes(encodeURIComponent('/next.ttl')));
+    await page.goBack();
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/ldes.ttl'));
     await page.setViewport({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.goto(base + '#url=' + encodeURIComponent(base + 'large.trig') + '&pane=explore&view=map&scope=window');

@@ -177,7 +177,7 @@ a:hover {
   display: flex;
   min-width: 0;
   gap: 0.5rem;
-  overflow-x: auto;
+  align-items: center;
   padding-bottom: 0.15rem;
 }
 
@@ -203,6 +203,41 @@ a:hover {
   color: white;
   border-color: var(--primary);
 }
+
+.more-examples { position: relative; flex: 0 0 auto; }
+.more-examples > summary {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #bfcce0;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 1.15rem;
+  font-weight: 700;
+  list-style: none;
+}
+.more-examples > summary::-webkit-details-marker { display: none; }
+.more-examples > summary:hover { background: #eef4fb; border-color: var(--primary); }
+.example-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + .45rem);
+  right: 0;
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: min(34rem, 70vh);
+  overflow-y: auto;
+  padding: .6rem;
+  border: 1px solid #bdcddd;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 25px #0002;
+}
+.example-menu section + section { border-top: 1px solid #e2e8f0; margin-top: .55rem; padding-top: .55rem; }
+.example-menu h3 { margin: 0 .45rem .3rem; color: #647180; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; }
+.example-menu .example-chip { display: block; width: 100%; border: 0; border-radius: 5px; text-align: left; }
 
 .advanced {
   max-width: 1100px;
@@ -613,6 +648,34 @@ button {
 .ontology-list h3, .chart-list h3 { margin: 0 0 0.5rem; color: var(--primary); }
 .ontology-list p { margin: 0.3rem 0; font-size: 0.82rem; }
 
+.time-series-list, .hypermedia-list { display: grid; gap: .8rem; }
+.time-series-list > section, .hypermedia-list > article {
+  min-width: 0;
+  padding: .85rem;
+  border: 1px solid #dfe6ee;
+  border-radius: 8px;
+  background: white;
+}
+.time-series-list h3, .hypermedia-list h3 { margin: 0 0 .5rem; color: var(--primary); }
+.time-series-chart { display: block; width: 100%; max-height: 18rem; overflow: visible; }
+.time-series-chart line { stroke: #a9b8c7; stroke-width: 1; }
+.time-series-chart polyline { fill: none; stroke: var(--primary); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.time-series-point { fill: var(--accent); stroke: white; stroke-width: 2; cursor: pointer; }
+.time-series-point:hover, .time-series-point:focus { fill: var(--primary); stroke: var(--accent); stroke-width: 3; outline: none; }
+.time-series-legend { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .35rem .75rem; color: #647180; font-family: var(--font-mono); font-size: .7rem; overflow-wrap: anywhere; }
+.time-series-legend b { color: var(--text); }
+.hypermedia-list article > p { margin: .3rem 0; font-size: .82rem; }
+.hypermedia-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }
+.hypermedia-link { display: inline-flex; align-items: center; gap: .2rem; }
+.hypermedia-link a { padding: .3rem; color: var(--primary); text-decoration: none; }
+.relation-controls { padding: 0; list-style: none; }
+.relation-controls li { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .45rem 0; border-bottom: 1px solid #edf0f3; }
+.relation-controls li > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; }
+.relation-controls li span { color: #647180; font-size: .76rem; }
+.hydra-template { margin-top: .65rem; padding: .65rem; border-radius: 6px; background: #f4f7fa; }
+.hydra-template code { overflow-wrap: anywhere; }
+.hydra-template ul { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: .45rem 0 0; padding: 0; list-style: none; font-size: .76rem; }
+
 .bar-chart { display: grid; gap: 0.3rem; }
 .bar-chart button {
   position: relative;
@@ -820,6 +883,9 @@ button {
 }
 
 @media (max-width: 650px) {
+  .examples-row { align-items: flex-start; flex-direction: column; }
+  .examples-list { flex-wrap: wrap; }
+  .example-menu { position: fixed; top: 8rem; right: 1rem; left: 1rem; width: auto; }
   .advanced-options {
     display: block;
   }

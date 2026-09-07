@@ -1,0 +1,39 @@
+# A deliberately tiny, provenance-linked extract shaped like RiverBench's
+# ASSIST-IoT weather stream. The public 10K-message distribution is several
+# megabytes compressed, so it is linked instead of automatically buffered.
+# Dataset: https://w3id.org/riverbench/datasets/assist-iot-weather/dev
+
+VERSION "1.1-messages"
+PREFIX sosa: <http://www.w3.org/ns/sosa/>
+PREFIX om: <http://www.ontology-of-units-of-measure.org/resource/om-2/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX ex: <https://example.org/riverbench-weather/>
+
+ex:observation-1 a sosa:Observation ;
+  dcterms:source <https://w3id.org/riverbench/datasets/assist-iot-weather/dev> ;
+  sosa:observedProperty ex:air-temperature ;
+  sosa:resultTime "2023-01-02T15:36:37.065535Z"^^xsd:dateTime .
+ex:result-1 sosa:isResultOf ex:observation-1 ;
+  om:hasNumericalValue "54.4"^^xsd:float ;
+  om:hasUnit om:degreeFahrenheit .
+
+MESSAGE
+
+ex:observation-2 a sosa:Observation ;
+  dcterms:source <https://w3id.org/riverbench/datasets/assist-iot-weather/dev> ;
+  sosa:observedProperty ex:air-temperature ;
+  sosa:resultTime "2023-01-02T15:36:47.138553Z"^^xsd:dateTime .
+ex:result-2 sosa:isResultOf ex:observation-2 ;
+  om:hasNumericalValue "54.4"^^xsd:float ;
+  om:hasUnit om:degreeFahrenheit .
+
+MESSAGE
+
+ex:observation-3 a sosa:Observation ;
+  dcterms:source <https://w3id.org/riverbench/datasets/assist-iot-weather/dev> ;
+  sosa:observedProperty ex:air-temperature ;
+  sosa:resultTime "2023-01-02T15:36:57.211575Z"^^xsd:dateTime .
+ex:result-3 sosa:isResultOf ex:observation-3 ;
+  om:hasNumericalValue "54.5"^^xsd:float ;
+  om:hasUnit om:degreeFahrenheit .

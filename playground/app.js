@@ -32,7 +32,9 @@ var COMMON_PREFIXES = {
   sosa: 'http://www.w3.org/ns/sosa/',
   oa: 'http://www.w3.org/ns/oa#',
   vc: 'https://www.w3.org/2018/credentials#',
-  tree: 'https://w3id.org/tree#'
+  tree: 'https://w3id.org/tree#',
+  ldes: 'https://w3id.org/ldes#',
+  tss: 'https://w3id.org/tss#'
 };
 
 var DEFAULT_FRAME = {
@@ -111,6 +113,37 @@ var EXAMPLES = {
   },
   geospatial: {
     url: new URL('examples/geospatial-messages.trig', document.baseURI).href
+  },
+  owl: {
+    url: 'https://www.w3.org/2002/07/owl.ttl'
+  },
+  'mol-ldes': {
+    url: 'https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS.trig'
+  },
+  'kbo-ldes': {
+    url: 'https://kbo-ldes-25a504.pages.ilabt.imec.be/index.ttl'
+  },
+  'sweden-dcat-ldes': {
+    url: 'https://www.pieter.pm/dcat/sweden/feed.ttl'
+  },
+  'dbpedia-tpf': {
+    url: 'https://fragments.dbpedia.org/2016-04/en'
+  },
+  'lov-tpf': {
+    url: 'https://data.linkeddatafragments.org/lov'
+  },
+  'ugent-biblio-tpf': {
+    url: 'https://data.linkeddatafragments.org/ugent-biblio'
+  },
+  'mol-tss': {
+    url: new URL('examples/mol-tss-readings.trig', document.baseURI).href
+  },
+  'riverbench-weather': {
+    url: new URL('examples/riverbench-weather-sample.trig', document.baseURI).href,
+    scope: 'memory'
+  },
+  'estat-cube': {
+    url: new URL('examples/japan-estat-data-cube.ttl', document.baseURI).href
   }
 };
 
@@ -199,7 +232,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var visualizationWorkbench = visualizations.createWorkbench(visualizationRoot, {
     onStateChange: function () { updateHash(); },
-    onAvailable: function (count) { document.getElementById('explore-tab').textContent = count ? 'Explore (' + count + ')' : 'Explore'; }
+    onAvailable: function (count) { document.getElementById('explore-tab').textContent = count ? 'Explore (' + count + ')' : 'Explore'; },
+    onLoadUrl: function (url) {
+      urlInput.value = url;
+      restoredMessagePosition = null;
+      window.history.pushState(null, '', configurationHash());
+      runFetch();
+    }
   });
 
   function showPane() {
@@ -941,8 +980,10 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.example-chip').forEach(function (chip) {
       chip.classList.toggle('active', chip === btn);
     });
+    document.getElementById('more-examples').open = false;
 
     urlInput.value = example.url;
+    if (example.scope) messageScope.value = example.scope;
     var viewState = visualizationWorkbench.getState();
     viewState.graph = '';
     viewState.entity = '';

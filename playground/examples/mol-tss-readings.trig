@@ -1,0 +1,27 @@
+# Small local extract from the Mol waterways LDES leaf page, retained so the
+# time-series demo is fast and deterministic. Source (retrieved 2026-09-07):
+# https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS/2020/11/07/readings.trig
+
+@prefix tss: <https://w3id.org/tss#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix ex: <https://example.org/mol-tss/> .
+
+ex:river-stage-20201107 a tss:Snippet ;
+  dcterms:source <https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS/2020/11/07/readings.trig> ;
+  tss:from "2020-11-07T12:00:00"^^xsd:dateTime ;
+  tss:to "2020-11-07T12:45:00"^^xsd:dateTime ;
+  tss:points """[
+    {"time":"2020-11-07T12:00:00","value":"29.64","id":"stage-1200","observedProperty":"River Stage"},
+    {"time":"2020-11-07T12:15:00","value":"29.66","id":"stage-1215","observedProperty":"River Stage"},
+    {"time":"2020-11-07T12:30:00","value":"29.65","id":"stage-1230","observedProperty":"River Stage"},
+    {"time":"2020-11-07T12:45:00","value":"29.68","id":"stage-1245","observedProperty":"River Stage"}
+  ]""" .
+
+ex:river-discharge-20201107 a tss:Snippet ;
+  tss:points """[
+    {"time":"2020-11-07T12:00:00","value":"3.58","id":"discharge-1200","observedProperty":"River Discharge"},
+    {"time":"2020-11-07T12:15:00","value":"3.61","id":"discharge-1215","observedProperty":"River Discharge"},
+    {"time":"2020-11-07T12:30:00","value":"3.59","id":"discharge-1230","observedProperty":"River Discharge"},
+    {"time":"2020-11-07T12:45:00","value":"3.64","id":"discharge-1245","observedProperty":"River Discharge"}
+  ]""" .

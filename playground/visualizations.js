@@ -20,6 +20,9 @@ var OA = 'http://www.w3.org/ns/oa#';
 var VC = 'https://www.w3.org/2018/credentials#';
 var HYDRA = 'http://www.w3.org/ns/hydra/core#';
 var TREE = 'https://w3id.org/tree#';
+var LDES = 'https://w3id.org/ldes#';
+var TSS = 'https://w3id.org/tss#';
+var OM = 'http://www.ontology-of-units-of-measure.org/resource/om-2/';
 var IIIF = 'http://iiif.io/api/presentation/3#';
 var RML = 'http://semweb.mmlab.be/ns/rml#';
 var RR = 'http://www.w3.org/ns/r2rml#';
@@ -466,6 +469,82 @@ function temporalModule() {
   };
 }
 
+function extractTimeSeries(index) {
+  var groups = {};
+  function add(group, point) {
+    if (!isFinite(point.time) || !isFinite(point.value)) return;
+    (groups[group] || (groups[group] = [])).push(point);
+  }
+
+  (index.predicates.get(TSS + 'points') || []).forEach(function (quad) {
+    if (quad.object.termType !== 'Literal') return;
+    var points;
+    try { points = JSON.parse(quad.object.value); } catch (error) { return; }
+    if (!Array.isArray(points)) return;
+    points.forEach(function (point, position) {
+      if (!point || typeof point !== 'object') return;
+      var label = point.observedProperty || index.label(quad.subject) || 'RDF TSS values';
+      add('TSS|' + label, {
+        entity: termKey(quad.subject), label: String(label), time: Date.parse(point.time),
+        timeLabel: String(point.time || ''), value: Number(point.value),
+        pointId: String(point.id == null ? position : point.id), source: 'RDF TSS JSON point'
+      });
+    });
+  });
+
+  index.entitiesOfType(SOSA + 'Observation').forEach(function (observation) {
+    var timeTerm = index.values(observation, [SOSA + 'resultTime', SOSA + 'phenomenonTime'])[0];
+    if (!timeTerm) return;
+    var property = index.values(observation, SOSA + 'observedProperty')[0];
+    var label = property ? index.label(property) : 'Observation';
+    var candidates = index.values(observation, SOSA + 'hasSimpleResult').map(function (term) { return { term: term, result: null }; });
+    index.values(observation, SOSA + 'hasResult').forEach(function (result) {
+      index.values(result, [OM + 'hasNumericalValue', 'http://qudt.org/schema/qudt/numericValue', SCHEMA[0] + 'value', SCHEMA[1] + 'value', RDF + 'value']).forEach(function (term) { candidates.push({ term: term, result: result }); });
+    });
+    (index.incoming.get(termKey(observation.term)) || []).filter(function (quad) { return quad.predicate.value === SOSA + 'isResultOf'; }).forEach(function (quad) {
+      index.values(quad.subject, [OM + 'hasNumericalValue', 'http://qudt.org/schema/qudt/numericValue', SCHEMA[0] + 'value', SCHEMA[1] + 'value', RDF + 'value']).forEach(function (term) { candidates.push({ term: term, result: quad.subject }); });
+    });
+    candidates.forEach(function (candidate, position) {
+      add('SOSA|' + (property ? property.value : label), {
+        entity: termKey(observation.term), label: label, time: Date.parse(timeTerm.value),
+        timeLabel: timeTerm.value, value: Number(candidate.term.value),
+        pointId: observation.term.value + ':' + position, source: 'SOSA observation'
+      });
+    });
+  });
+
+  return Object.keys(groups).map(function (key) {
+    var points = groups[key].sort(function (a, b) { return a.time - b.time; });
+    return { key: key, label: points[0].label, points: points };
+  }).filter(function (series) { return series.points.length > 1; }).sort(function (a, b) { return b.points.length - a.points.length; });
+}
+
+function timeSeriesModule() {
+  return {
+    id: 'timeseries', title: 'Time series', priority: 925,
+    detect: function (index) { var found = extractTimeSeries(index); return { useful: found.length > 0, count: found.reduce(function (sum, series) { return sum + series.points.length; }, 0) }; },
+    render: function (index) {
+      var found = extractTimeSeries(index).slice(0, 6);
+      return '<div class="time-series-list">' + found.map(function (series) {
+        var points = series.points.slice(0, 500);
+        var minTime = points[0].time, maxTime = points[points.length - 1].time;
+        var values = points.map(function (point) { return point.value; });
+        var minValue = Math.min.apply(null, values), maxValue = Math.max.apply(null, values);
+        var timeSpan = Math.max(1, maxTime - minTime), valueSpan = Math.max(1e-12, maxValue - minValue);
+        var coordinates = points.map(function (point) {
+          return (20 + (point.time - minTime) / timeSpan * 560).toFixed(2) + ',' + (170 - (point.value - minValue) / valueSpan * 140).toFixed(2);
+        }).join(' ');
+        var marks = points.map(function (point) {
+          var x = 20 + (point.time - minTime) / timeSpan * 560;
+          var y = 170 - (point.value - minValue) / valueSpan * 140;
+          return '<circle tabindex="0" role="button" class="time-series-point" data-entity="' + esc(point.entity) + '" data-point-id="' + esc(point.pointId) + '" data-time="' + esc(point.timeLabel) + '" data-value="' + esc(point.value) + '" cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) + '" r="4"><title>' + esc(series.label + ' · ' + point.timeLabel + ' · ' + point.value) + '</title></circle>';
+        }).join('');
+        return '<section><h3>' + esc(series.label) + '</h3><svg class="time-series-chart" viewBox="0 0 600 190" role="img" aria-label="' + esc(series.label + ', ' + points.length + ' loaded points') + '"><line x1="20" y1="170" x2="580" y2="170"></line><polyline points="' + coordinates + '"></polyline>' + marks + '</svg><div class="time-series-legend"><span>' + esc(points[0].timeLabel) + '</span><b>' + esc(minValue + ' – ' + maxValue) + '</b><span>' + esc(points[points.length - 1].timeLabel) + '</span></div></section>';
+      }).join('') + '</div><p class="view-note">Values are plotted directly from loaded RDF TSS points or SOSA observations; no interpolation or unit conversion is applied.</p>';
+    }
+  };
+}
+
 function taxonomyModule() {
   function concepts(index) { return index.entitiesOfType(SKOS + 'Concept'); }
   return {
@@ -676,10 +755,70 @@ function cardsModule(id, title, types, fields, priority) {
   };
 }
 
+function hypermediaModule() {
+  var types = [LDES + 'EventStream', HYDRA + 'Collection', HYDRA + 'ApiDocumentation', TREE + 'Collection', TREE + 'Node', 'http://rdfs.org/ns/void#Dataset'];
+  var controlPredicates = [TREE + 'view', TREE + 'relation', TREE + 'node', TREE + 'member', HYDRA + 'search', HYDRA + 'template', HYDRA + 'next'];
+  function resources(index) {
+    var found = index.entitiesOfType(types);
+    index.quads.forEach(function (quad) {
+      if (controlPredicates.indexOf(quad.predicate.value) === -1) return;
+      var entity = index.entity(quad.subject);
+      if (entity && found.indexOf(entity) === -1) found.push(entity);
+    });
+    return found;
+  }
+  function loadLink(index, term, label) {
+    var url = term && term.termType === 'NamedNode' ? safeUrl(term.value) : '';
+    return url ? '<span class="hypermedia-link"><button type="button" class="action-button secondary" data-load-url="' + esc(url) + '">' + esc(label || 'Load') + '</button><a href="' + esc(url) + '" target="_blank" rel="noopener" title="Open in a new tab">↗</a></span>' : termHtml(index, term);
+  }
+  return {
+    id: 'hypermedia', title: 'Hypermedia controls', priority: 900,
+    detect: function (index) { var found = resources(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      var found = resources(index).filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; });
+      return '<div class="hypermedia-list">' + found.map(function (entity) {
+        var views = index.values(entity, [TREE + 'view', HYDRA + 'next']);
+        var members = index.values(entity, [TREE + 'member', HYDRA + 'member']);
+        var relations = index.values(entity, TREE + 'relation');
+        var searches = index.values(entity, HYDRA + 'search');
+        var metadata = [
+          { label: 'Timestamp path', values: index.values(entity, LDES + 'timestampPath') },
+          { label: 'Version path', values: index.values(entity, LDES + 'versionOfPath') },
+          { label: 'Shape', values: index.values(entity, TREE + 'shape') }
+        ].map(function (row) { return row.values.length ? '<p><b>' + row.label + '</b> ' + row.values.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : ''; }).join('');
+        var relationHtml = relations.map(function (relationTerm) {
+          var relation = index.entity(relationTerm);
+          if (!relation) return '<li>' + termHtml(index, relationTerm) + '</li>';
+          var node = index.values(relation, TREE + 'node')[0];
+          var path = index.values(relation, TREE + 'path')[0];
+          var value = index.values(relation, TREE + 'value')[0];
+          var relationType = index.values(relation, RDF + 'type')[0];
+          return '<li><div><b>' + esc(relationType ? index.label(relationType) : 'TREE relation') + '</b>' + (path ? '<span>' + esc(index.label(path)) + '</span>' : '') + (value ? '<span>' + esc(value.value) + '</span>' : '') + '</div>' + (node ? loadLink(index, node, 'Load page') : termHtml(index, relationTerm)) + '</li>';
+        }).join('');
+        var searchHtml = searches.map(function (searchTerm) {
+          var search = index.entity(searchTerm);
+          var template = search && index.values(search, HYDRA + 'template')[0];
+          var mappings = search ? index.values(search, HYDRA + 'mapping') : [];
+          return '<div class="hydra-template"><code>' + esc(template ? template.value : searchTerm.value) + '</code>' + (mappings.length ? '<ul>' + mappings.map(function (mappingTerm) {
+            var mapping = index.entity(mappingTerm);
+            var variable = mapping && index.values(mapping, HYDRA + 'variable')[0];
+            var property = mapping && index.values(mapping, HYDRA + 'property')[0];
+            return '<li><b>' + esc(variable ? variable.value : 'parameter') + '</b>' + (property ? ' → ' + esc(index.label(property)) : '') + '</li>';
+          }).join('') + '</ul>' : '') + '</div>';
+        }).join('');
+        return '<article data-select-entity="' + esc(termKey(entity.term)) + '"><h3>' + esc(index.label(entity)) + '</h3>' + metadata +
+          (views.length ? '<div class="hypermedia-actions"><b>Entry points</b>' + views.map(function (term) { return loadLink(index, term, 'Load'); }).join('') + '</div>' : '') +
+          (members.length ? '<p><b>Loaded members</b> ' + members.length + '</p>' : '') +
+          (relationHtml ? '<details open><summary>' + relations.length + ' TREE relation' + (relations.length === 1 ? '' : 's') + '</summary><ul class="relation-controls">' + relationHtml + '</ul></details>' : '') + searchHtml + '</article>';
+      }).join('') + '</div><p class="view-note">Loading a control replaces the current source. The original RDF remains recoverable with browser Back.</p>';
+    }
+  };
+}
+
 function createRegistry() {
   return [
     overviewModule(), profilesModule(), imagesModule(), shaclModule(), formPreviewModule(), credentialsModule(),
-    geographyModule(), taxonomyModule(), ontologyModule(), temporalModule(), statisticsModule(), mappingsModule(),
+    geographyModule(), timeSeriesModule(), taxonomyModule(), ontologyModule(), temporalModule(), statisticsModule(), mappingsModule(),
     cardsModule('datasets', 'Data catalog', [DCAT + 'Catalog', DCAT + 'Dataset', DCAT + 'Distribution'], [
       { label: 'Publisher', predicates: ['http://purl.org/dc/terms/publisher'] },
       { label: 'Description', predicates: ['http://purl.org/dc/terms/description'] },
@@ -697,11 +836,7 @@ function createRegistry() {
       { label: 'Generated', predicates: [PROV + 'wasGeneratedBy', PROV + 'generated'] },
       { label: 'Attributed to', predicates: [PROV + 'wasAttributedTo', PROV + 'wasAssociatedWith'] }
     ], 690),
-    cardsModule('hypermedia', 'Links & collections', [HYDRA + 'Collection', HYDRA + 'ApiDocumentation', TREE + 'Collection', TREE + 'Node'], [
-      { label: 'Members', predicates: [HYDRA + 'member', TREE + 'member'] },
-      { label: 'Next', predicates: [HYDRA + 'next'] },
-      { label: 'Relations', predicates: [TREE + 'relation'] }
-    ], 680),
+    hypermediaModule(),
     cardsModule('organizations', 'Organizations', [ORG + 'Organization', ORG + 'OrganizationalUnit', ORG + 'Membership', ORG + 'Post'], [
       { label: 'Organization', predicates: [ORG + 'organization', ORG + 'unitOf'] },
       { label: 'Member', predicates: [ORG + 'member'] },
@@ -726,6 +861,7 @@ function rankViews(available) {
   if (ids.includes('iiif')) secondary.push('images');
   if (ids.includes('credentials')) secondary.push('profiles');
   if (ids.includes('sensors')) secondary.push('timeline');
+  if (ids.includes('timeseries')) secondary.push('timeline', 'statistics');
   var primary = available.filter(function (item) { return !secondary.includes(item.module.id); }).slice(0, 4);
   return { primary: primary, more: available.filter(function (item) { return item.module.id !== 'overview' && !primary.includes(item); }) };
 }
@@ -876,6 +1012,11 @@ function createWorkbench(root, options) {
       validateShacl();
       return;
     }
+    var loadTarget = event.target.closest('[data-load-url]');
+    if (loadTarget) {
+      if (options.onLoadUrl) options.onLoadUrl(loadTarget.dataset.loadUrl);
+      return;
+    }
     var tab = event.target.closest('[data-view]');
     if (tab) { state.view = tab.dataset.view; root.querySelector('.more-views').open = false; render(); var focused = root.querySelector('#viewer-tab-' + state.view); if (focused) focused.focus(); notify(); return; }
     var entityTarget = event.target.closest('[data-entity], [data-select-entity]');
@@ -976,5 +1117,6 @@ module.exports = {
   detectAvailable: detectAvailable,
   rankViews: rankViews,
   createWorkbench: createWorkbench,
+  extractTimeSeries: extractTimeSeries,
   termKey: termKey
 };

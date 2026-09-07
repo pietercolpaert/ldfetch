@@ -1,0 +1,22 @@
+# Small, browser-safe RDF Data Cube demo modelled on Japan's official
+# Statistics LOD observations. Only the 2010 value is copied from the linked
+# example observation; the earlier values are synthetic chart-test data.
+# Source and schema: https://data.e-stat.go.jp/lodw/en/rdfschema
+
+@prefix qb: <http://purl.org/linked-data/cube#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix ex: <https://example.org/estat-extract/> .
+@prefix estat-measure: <http://data.e-stat.go.jp/lod/ontology/measure/> .
+@prefix sdmx-dimension: <http://purl.org/linked-data/sdmx/2009/dimension#> .
+
+ex:population-by-year a qb:DataSet ;
+  dcterms:title "Population observations — e-Stat demonstration extract"@en ;
+  dcterms:source <https://data.e-stat.go.jp/lodw/en/rdfschema> .
+
+ex:population-2000 a qb:Observation ; qb:dataSet ex:population-by-year ;
+  sdmx-dimension:timePeriod "2000"^^xsd:gYear ; estat-measure:population "221506"^^xsd:decimal .
+ex:population-2005 a qb:Observation ; qb:dataSet ex:population-by-year ;
+  sdmx-dimension:timePeriod "2005"^^xsd:gYear ; estat-measure:population "228815"^^xsd:decimal .
+ex:population-2010 a qb:Observation ; qb:dataSet ex:population-by-year ;
+  sdmx-dimension:timePeriod "2010"^^xsd:gYear ; estat-measure:population "237299"^^xsd:decimal .

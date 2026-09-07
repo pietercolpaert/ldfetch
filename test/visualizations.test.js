@@ -3,12 +3,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const dataModel = require('@rdfjs/data-model').default;
-const { DatasetIndex, createRegistry, detectAvailable, termKey } = require('../playground/visualizations');
+const { DatasetIndex, createRegistry, detectAvailable, extractTimeSeries, termKey } = require('../playground/visualizations');
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
 const FOAF = 'http://xmlns.com/foaf/0.1/';
 const SH = 'http://www.w3.org/ns/shacl#';
+const TSS = 'https://w3id.org/tss#';
 
 test('visualization index preserves repeated values, incoming links, and graph identity', () => {
   const alice = dataModel.namedNode('https://example.test/alice');
@@ -56,4 +57,20 @@ test('registry progressively detects profile, SHACL, temporal, and numeric views
   assert.ok(ids.includes('statistics'));
   assert.ok(ids.includes('relationships'));
   assert.ok(ids.includes('overview'));
+});
+
+test('RDF TSS JSON subpoints become ordered time-series points', () => {
+  const snippet = dataModel.namedNode('https://example.test/snippet');
+  const index = new DatasetIndex({ tss: TSS });
+  index.add(dataModel.quad(snippet, dataModel.namedNode(TSS + 'points'), dataModel.literal(JSON.stringify([
+    { time: '2020-11-07T12:15:00Z', value: '29.66', id: 'stage-1215', observedProperty: 'River Stage' },
+    { time: '2020-11-07T12:00:00Z', value: '29.64', id: 'stage-1200', observedProperty: 'River Stage' }
+  ]))));
+  index.add(dataModel.quad(dataModel.namedNode('https://example.test/broken'), dataModel.namedNode(TSS + 'points'), dataModel.literal('[not json')));
+
+  const series = extractTimeSeries(index);
+  assert.equal(series.length, 1);
+  assert.equal(series[0].label, 'River Stage');
+  assert.deepEqual(series[0].points.map(point => point.pointId), ['stage-1200', 'stage-1215']);
+  assert.equal(series[0].points[1].value, 29.66);
 });
