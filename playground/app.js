@@ -86,7 +86,7 @@ var EXAMPLES = {
   // preflight rejects a Range header, so this one is handled by a separate,
   // manual streaming path (see startStreamingExample) rather than a normal
   // fetcher.get() call: one long-lived GET, paused every WINDOW_SIZE
-  // messages by simply not reading further, resumed on "Load next 100".
+  // messages by simply not reading further, resumed on "Load next" click.
   'rdf-messages-large': {
     url: 'https://ugent-lib-opendata-prd.s3.ugent.be/alma-rdf/rdf-messages.20260404.nt',
     streaming: true
@@ -135,11 +135,12 @@ document.addEventListener('DOMContentLoaded', function () {
   // document has been parsed, so for that format family this still bounds
   // what the playground itself renders/retains, but not what the parser
   // buffers internally while it runs.
-  var WINDOW_SIZE = 100;
+  var WINDOW_SIZE = 1000;
   var currentMessages = [];
   var pendingMessages = [];
   var windowStartIndex = 0;
   var fetchComplete = false;
+  loadMoreMessagesBtn.textContent = 'Load next ' + WINDOW_SIZE;
 
   // Manual streaming session state for the one example too large to ever
   // fully buffer (see startStreamingExample). streamingReader is non-null
@@ -449,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // and a chunk can't be consumed partway through, so "buffered so
         // far" can overshoot the round WINDOW_SIZE step -- the window
         // shown on screen stays capped at WINDOW_SIZE regardless.
-        setStatus('Paused: ' + total + ' messages fetched so far (' + WINDOW_SIZE + ' shown at a time) -- click "Load next 100" to keep streaming.');
+        setStatus('Paused: ' + total + ' messages fetched so far (' + WINDOW_SIZE + ' shown at a time) -- click "Load next ' + WINDOW_SIZE + '" to keep streaming.');
       }
       fetchBtn.disabled = false;
     }).catch(function (error) {
@@ -591,7 +592,7 @@ document.addEventListener('DOMContentLoaded', function () {
       '// through), so track the highest messageCounter seen rather than',
       "// counting items -- that's how many *complete* messages you have.",
       'let highestMessageCounter = -1;',
-      'while (highestMessageCounter < 99) {',
+      'while (highestMessageCounter < ' + (WINDOW_SIZE - 1) + ') {',
       '  const { done, value } = await reader.read();',
       '  if (done) break;',
       '  for (const item of parser.write(decoder.decode(value, { stream: true }))) {',
