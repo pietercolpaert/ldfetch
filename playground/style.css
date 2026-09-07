@@ -29,6 +29,11 @@
 .globe { width: 100%; height: min(65vh, 620px); min-height: 340px; background: #10283f; border-radius: 8px; }
 .geometry-list { max-height: 20rem; overflow: auto; }
 .geometry-list p, .geometry-issues p { font-size: .82rem; overflow-wrap: anywhere; }
+.feature-popup h3 { margin: 0 1.25rem .4rem 0; color: var(--primary); font-size: 1rem; }
+.feature-popup h3 a { color: inherit; }
+.feature-popup dl { display: grid; grid-template-columns: minmax(5rem, auto) minmax(0, 1fr); gap: .2rem .6rem; margin: 0; max-height: 15rem; overflow: auto; font-size: .76rem; }
+.feature-popup dt { color: #536779; font-family: var(--font-mono); font-weight: bold; }
+.feature-popup dd { margin: 0; overflow-wrap: anywhere; }
 #messages-panel select { max-width: 100%; padding: .4rem; }
 @media (max-width: 650px) { .message-slider-row { flex-wrap: wrap; } #message-slider { flex-basis: 50%; } }
 

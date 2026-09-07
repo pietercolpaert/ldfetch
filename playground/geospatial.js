@@ -92,10 +92,15 @@ function extract(index) {
     });
     function add(q, geometry, crs) {
       const owner = owners.get(key(q.subject)) || q.subject;
+      const details = (subjects.get(key(owner)) || []).filter(item => item.predicate.value !== GEO + 'asWKT' && item.predicate.value !== GEO + 'asGeoJSON').map(item => {
+        const fullValue = item.object.termType === 'Literal' ? item.object.value : index.compact(item.object.value);
+        return { name: index.compact(item.predicate.value), value: fullValue.length > 240 ? fullValue.slice(0, 237) + '…' : fullValue };
+      }).filter((item, position, all) => all.findIndex(other => other.name === item.name && other.value === item.value) === position).slice(0, 8);
       features.push({ type: 'Feature', id: features.length, geometry, properties: {
         entity: key(owner),
+        entityUrl: owner.termType === 'NamedNode' ? owner.value : '',
         geometryEntity: key(q.subject), label: index.label(owner),
-        message: group.message, crs, source: q.object.value
+        message: group.message, crs, source: q.object.value, details: JSON.stringify(details)
       } });
     }
     group.quads.forEach(q => {
@@ -167,6 +172,7 @@ function loadRenderer() {
 function mount(container, collection, select, camera, onCamera) {
   let disposed = false;
   let map;
+  let popup;
   const status = container.parentElement.querySelector('[data-map-status]');
   const data = { type: 'FeatureCollection', features: [] };
   function worldZoom() { return Math.max(0, Math.log2(Math.min(container.clientWidth, container.clientHeight) * 0.8 / 160)); }
@@ -188,6 +194,39 @@ function mount(container, collection, select, camera, onCamera) {
     const bounds = new window.maplibregl.LngLatBounds();
     extendBounds(bounds, feature.geometry);
     if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: duration });
+  }
+  function featureCenter(feature) {
+    if (feature.geometry.type === 'Point') return feature.geometry.coordinates.slice(0, 2);
+    const bounds = new window.maplibregl.LngLatBounds();
+    extendBounds(bounds, feature.geometry);
+    return bounds.isEmpty() ? map.getCenter() : bounds.getCenter();
+  }
+  function showFeaturePopup(feature, location) {
+    if (!map || !feature) return;
+    if (popup) popup.remove();
+    const properties = feature.properties || {};
+    const content = document.createElement('section');
+    content.className = 'feature-popup';
+    const heading = document.createElement('h3');
+    if (properties.entityUrl) {
+      const link = document.createElement('a');
+      link.href = properties.entityUrl;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = properties.label || properties.entityUrl;
+      heading.appendChild(link);
+    } else heading.textContent = properties.label || 'Feature';
+    content.appendChild(heading);
+    const details = document.createElement('dl');
+    const rows = [];
+    try { rows.push(...JSON.parse(properties.details || '[]').map(item => [item.name, item.value])); } catch (error) { /* malformed optional metadata */ }
+    rows.forEach(row => {
+      const name = document.createElement('dt'); name.textContent = row[0];
+      const value = document.createElement('dd'); value.textContent = row[1];
+      details.append(name, value);
+    });
+    content.appendChild(details);
+    popup = new window.maplibregl.Popup({ maxWidth: '340px' }).setLngLat(location || featureCenter(feature)).setDOMContent(content).addTo(map);
   }
   collection.features.forEach(f => flatten(f, f.geometry));
   loadRenderer().then(lib => {
@@ -211,6 +250,7 @@ function mount(container, collection, select, camera, onCamera) {
         const hits = map.queryRenderedFeatures(event.point, { layers: ['points', 'lines', 'areas'] });
         if (hits.length) {
           focusFeature(hits[0], 900);
+          showFeaturePopup(hits[0], event.lngLat);
           select(hits[0].properties.entity);
         }
       });
@@ -226,9 +266,10 @@ function mount(container, collection, select, camera, onCamera) {
       if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 0 });
     };
   }).catch(error => { if (!disposed) status.textContent = 'Globe unavailable: ' + error.message + ' The geometry list is still usable.'; });
-  const remove = () => { disposed = true; if (map) map.remove(); };
+  const remove = () => { disposed = true; if (popup) popup.remove(); if (map) map.remove(); };
   remove.update = next => {
     collection = next;
+    if (popup) { popup.remove(); popup = null; }
     data.features = [];
     collection.features.forEach(f => flatten(f, f.geometry));
     if (map) {
@@ -238,7 +279,11 @@ function mount(container, collection, select, camera, onCamera) {
     }
     status.textContent = collection.features.length + ' geometries · drag to rotate, scroll to zoom';
   };
-  remove.focus = id => focusFeature(data.features.find(feature => String(feature.id) === String(id)), 900);
+  remove.focus = id => {
+    const feature = data.features.find(item => String(item.id) === String(id));
+    focusFeature(feature, 900);
+    showFeaturePopup(feature);
+  };
   return remove;
 }
 
