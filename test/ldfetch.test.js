@@ -219,6 +219,64 @@ test('ldfetch.getStream falls back to internally buffering formats with no incre
   }
 });
 
+test('ldfetch.getStream tags quad events with their messageCounter for a message-framed source', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle; charset=utf-8' });
+    res.end('@version "1.2-messages" .\n<#s> <https://schema.org/name> "first" .\nMESSAGE\n<#s> <https://schema.org/name> "second" .');
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    const tags = [];
+    fetcher.on('quad', (quad, messageCounter) => tags.push(messageCounter));
+
+    await fetcher.getStream(`${baseUrl}/log`);
+
+    assert.deepEqual(tags, [0, 1]);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('ldfetch.get leaves the messageCounter undefined for an ordinary (non-message) quad event', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle; charset=utf-8' });
+    res.end('<#s> <https://schema.org/name> "plain" .');
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    const tags = [];
+    fetcher.on('quad', (quad, messageCounter) => tags.push(messageCounter));
+
+    await fetcher.get(`${baseUrl}/profile`);
+
+    assert.deepEqual(tags, [undefined]);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('ldfetch.messageToJsonLd converts a message to a plain JSON-LD object per the NDJSON-LD spec', async () => {
+  const fetcher = new LDFetch();
+  const { DataFactory } = require('rdfjs-jelly');
+  const { namedNode, literal, quad } = DataFactory;
+
+  assert.deepEqual(fetcher.messageToJsonLd([]), {}, 'an empty message is the literal {}');
+
+  const singleSubject = fetcher.messageToJsonLd([
+    quad(namedNode('https://example.org/s'), namedNode('https://example.org/p'), literal('one subject'))
+  ]);
+  assert.equal(singleSubject['@id'], 'https://example.org/s');
+  assert.equal(singleSubject['https://example.org/p']['@value'], 'one subject');
+
+  const multiSubject = fetcher.messageToJsonLd([
+    quad(namedNode('https://example.org/s1'), namedNode('https://example.org/p'), literal('a')),
+    quad(namedNode('https://example.org/s2'), namedNode('https://example.org/p'), literal('b'))
+  ]);
+  assert.equal(multiSubject['@graph'].length, 2, 'more than one subject keeps the @graph wrapper');
+});
+
 test('ldfetch.frame applies a JSON-LD frame to parsed triples', async () => {
   const { server, baseUrl } = await createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/turtle; charset=utf-8' });

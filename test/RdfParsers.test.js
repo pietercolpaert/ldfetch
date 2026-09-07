@@ -79,6 +79,62 @@ test('RdfParsers never reports messages for ordinary (non-message) Turtle', asyn
   assert.equal(messages.length, 0);
 });
 
+test('RdfParsers tags data events with their messageCounter', async () => {
+  const tags = [];
+  await new Promise((resolve, reject) => {
+    RdfParsers.parse({
+      bodyText: '@version "1.2-messages" .\n<https://example.org/s> <https://example.org/p> "m1" .\nMESSAGE\n<https://example.org/s> <https://example.org/p> "m2" .',
+      contentType: 'text/turtle',
+      baseIRI: 'https://example.org/'
+    })
+      .on('data', (quad, messageCounter) => tags.push(messageCounter))
+      .on('error', reject)
+      .on('end', resolve);
+  });
+  assert.deepEqual(tags, [0, 1]);
+});
+
+test('RdfParsers leaves the messageCounter undefined for ordinary (non-message) Turtle', async () => {
+  const tags = [];
+  await new Promise((resolve, reject) => {
+    RdfParsers.parse({
+      bodyText: '<https://example.org/s> <https://example.org/p> "plain" .',
+      contentType: 'text/turtle',
+      baseIRI: 'https://example.org/'
+    })
+      .on('data', (quad, messageCounter) => tags.push(messageCounter))
+      .on('error', reject)
+      .on('end', resolve);
+  });
+  assert.deepEqual(tags, [undefined]);
+});
+
+test('RdfParsers.parseStream emits message boundaries progressively, not just at the end (issue #59 follow-up)', async () => {
+  const { PassThrough } = require('node:stream');
+  const input = new PassThrough();
+  const events = [];
+  const emitter = RdfParsers.parseStream(input, { contentType: 'text/turtle', baseIRI: 'https://example.org/' });
+  const donePromise = new Promise((resolve, reject) => {
+    emitter.on('message', (quadsInMessage) => events.push(['message', quadsInMessage.length]));
+    emitter.on('error', reject);
+    emitter.on('end', () => { events.push(['end']); resolve(); });
+  });
+
+  input.write('@version "1.2-messages" .\n<https://example.org/s> <https://example.org/p> "m1" .\nMESSAGE\n');
+  input.write('<https://example.org/s> <https://example.org/p> "m2" .\nMESSAGE\n');
+  // The first message is only ever confirmed complete once evidence of what
+  // follows it arrives (here, message 2's own quad) -- but crucially that
+  // happens well before the stream ends (still open below): if 'message'
+  // only fired at 'end' (the old toMessages()-at-end grouping), this would
+  // still be empty here.
+  await new Promise((resolve) => emitter.once('message', () => setImmediate(resolve)));
+  assert.deepEqual(events, [['message', 1]]);
+
+  input.end('<https://example.org/s> <https://example.org/p> "m3" .');
+  await donePromise;
+  assert.deepEqual(events, [['message', 1], ['message', 1], ['message', 1], ['end']]);
+});
+
 test('RdfParsers parses JSON-LD', async () => {
   const { triples } = await collect({
     bodyText: JSON.stringify({ '@id': 'https://example.org/s', 'https://example.org/p': 'from json-ld' }),

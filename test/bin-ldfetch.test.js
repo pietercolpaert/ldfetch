@@ -116,6 +116,92 @@ test('CLI (issue #59) writes triples to stdout before the source has finished se
   }
 });
 
+test('CLI writes a message-framed source as a proper RDF Message Log by default (streaming)', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.write('@version "1.2-messages" .\n');
+    res.write('<https://example.org/s1> <https://example.org/p> "m1" .\n');
+    res.write('MESSAGE\n');
+    res.write('MESSAGE\n');
+    res.end('<https://example.org/s3> <https://example.org/p> "m3" .\n');
+  });
+
+  try {
+    const { code, stdout } = await runCli([`${baseUrl}/log`]);
+    assert.equal(code, 0);
+    assert.match(stdout, /@version "1\.2-messages" \./);
+    // Two consecutive @message . lines: the deliberately empty message
+    // between m1 and m3 must still round-trip, exactly like the parser side.
+    assert.match(stdout, /"m1"\.\s*@message \.\s*@message \.\s*<https:\/\/example\.org\/s3>[^"]*"m3"/);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('CLI --format nquads writes a message-framed source with VERSION/MESSAGE line delimiters', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.write('@version "1.2-messages" .\n');
+    res.write('<https://example.org/s1> <https://example.org/p> "m1" .\n');
+    res.write('MESSAGE\n');
+    res.end('<https://example.org/s2> <https://example.org/p> "m2" .\n');
+  });
+
+  try {
+    const { code, stdout } = await runCli(['--format', 'nquads', `${baseUrl}/log`]);
+    assert.equal(code, 0);
+    assert.match(stdout, /VERSION "1\.2-messages"\n.*"m1".*\nMESSAGE\n.*"m2"/s);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('CLI --format json-ld writes newline-delimited JSON-LD, one line per message', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.write('@version "1.2-messages" .\n');
+    res.write('<https://example.org/s1> <https://example.org/p> "m1" .\n');
+    res.write('MESSAGE\n');
+    res.write('MESSAGE\n');
+    res.end('<https://example.org/s3> <https://example.org/p> "m3" .\n');
+  });
+
+  try {
+    const { code, stdout } = await runCli(['--format', 'json-ld', `${baseUrl}/log`]);
+    assert.equal(code, 0);
+    const lines = stdout.trim().split('\n');
+    assert.equal(lines.length, 3);
+    assert.equal(JSON.parse(lines[0])['https://example.org/p']['@value'], 'm1');
+    assert.deepEqual(JSON.parse(lines[1]), {}, 'the empty middle message is the literal {}');
+    assert.equal(JSON.parse(lines[2])['https://example.org/p']['@value'], 'm3');
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('CLI --format json-ld writes one JSON-LD document for a non-message source', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.end('<https://example.org/s> <https://example.org/p> "plain" .');
+  });
+
+  try {
+    const { code, stdout } = await runCli(['--format', 'json-ld', `${baseUrl}/resource`]);
+    assert.equal(code, 0);
+    const lines = stdout.trim().split('\n');
+    assert.equal(lines.length, 1);
+    assert.equal(JSON.parse(lines[0])['@graph'][0]['https://example.org/p']['@value'], 'plain');
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('CLI rejects an unknown --format', async () => {
+  const { code, stderr } = await runCli(['--format', 'xml', 'https://example.org/']);
+  assert.notEqual(code, 0);
+  assert.match(stderr, /Unknown --format/);
+});
+
 test('CLI --frame still buffers the whole response (framing needs the full graph)', async () => {
   const { server, baseUrl } = await createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/turtle' });

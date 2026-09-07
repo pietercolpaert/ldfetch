@@ -13,9 +13,12 @@ var list = function (val) {
   return val.split(',');
 }
 
+var FORMATS = ['trig', 'nquads', 'json-ld'];
+
 program
   .option('-p, --predicates <predicates ...>', 'Some predicates can be followed [predicates]', list)
   .option('--frame <jsonldframe|file>', 'Add a JSON-LD frame')
+  .option('--format <trig|nquads|json-ld>', 'Output format (default: trig)', 'trig')
   .option('-l, --local-files', 'Allow fetching file:// URLs (disabled by default; only use with trusted input)')
   .arguments('<url>')
   .action(function (argUrl) {
@@ -26,6 +29,11 @@ program
 let options = program.opts();
 
 if (!options.predicates)  options.predicates = [];
+
+if (FORMATS.indexOf(options.format) === -1) {
+  console.error('Unknown --format ' + options.format + ' (expected one of: ' + FORMATS.join(', ') + ')');
+  process.exit(1);
+}
 
 var fetch = new ldfetch({ localFiles: !!options.localFiles });
 
@@ -45,16 +53,28 @@ if (!isAllowedProtocol(url, { localFiles: options.localFiles })) {
     : 'Only http:// and https:// URLs are supported (pass --local-files to also allow file:// URLs)');
   process.exit(1);
 }
-var writer = new rdfWriter.Writer(process.stdout, {end: false});
+//RDF Message-framed sources (Turtle/TriG "-messages" versions, Jelly-RDF)
+//round-trip as RDF Message Logs here too: rdf-writer-ts's addQuad() accepts
+//a { quad, messageCounter } entry in place of a bare quad and, given those,
+//writes the VERSION/MESSAGE (or @version/@message) delimiters itself --
+//including filling in entirely empty messages from gaps in the counter --
+//so passing the tagged form whenever it's available (see the 'quad' event,
+//and lib/RdfParsers.js's relayMessageAwareStream/wireJellyMessages) is all
+//that's needed. Ordinary, non-message sources are untouched: messageCounter
+//is simply undefined for their quads, so they fall through to plain addQuad().
+var isJsonLd = options.format === 'json-ld';
+var writer = new rdfWriter.Writer(process.stdout, { format: options.format === 'nquads' ? 'N-Quads' : 'TriG', end: false });
 var prefixesWritten = false;
 
-//--frame needs the whole graph in memory to frame it, and --predicates needs
-//every triple of a page available up front to decide what to follow next --
-//both are fundamentally incompatible with streaming, so only stream when
-//neither is requested. This is what actually solves issue #59: previously
-//every fetch, streamed or not, waited for the full body to download AND
-//parse before a single triple reached stdout.
-var canStream = !options.frame && options.predicates.length === 0;
+//--frame needs the whole graph in memory to frame it, --predicates needs
+//every triple of a page available up front to decide what to follow next,
+//and JSON-LD output needs a complete message (or, absent messages, the
+//whole graph) before it can be converted -- all fundamentally incompatible
+//with streaming, so only stream plain TriG/N-Quads output with neither of
+//those requested. This is what actually solves issue #59: previously every
+//fetch, streamed or not, waited for the full body to download AND parse
+//before a single triple reached stdout.
+var canStream = !options.frame && options.predicates.length === 0 && !isJsonLd;
 
 var processPage = async function (pageUrl) {
   console.error('GET ' + pageUrl);
@@ -68,7 +88,10 @@ var processPage = async function (pageUrl) {
       //the whole document, as the buffered path below does) still produces
       //valid, and still nicely compacted, output.
       var onPrefix = (prefix, iri) => writer.addPrefix(prefix, iri);
-      var onQuad = (quad) => writer.addQuad(quad);
+      var onQuad = (quad, messageCounter) => {
+        if (messageCounter === undefined) writer.addQuad(quad);
+        else writer.addQuad({ quad, messageCounter });
+      };
       if (!prefixesWritten) {
         prefixesWritten = true;
         writer.addPrefixes(fetch.prefixes);
@@ -92,7 +115,7 @@ var processPage = async function (pageUrl) {
       if (response.triples) {
         if (options.frame) {
           //Frame output is JSON, not Turtle -- the writer (and its prefix
-          //header) is only for the Turtle/TriG output path below.
+          //header) is only for the Turtle/TriG/N-Quads output path below.
           let frame;
 
           if (fs.existsSync(options.frame)) {
@@ -103,6 +126,18 @@ var processPage = async function (pageUrl) {
           }
           let object = await fetch.frame(response.triples, frame);
           console.log(JSON.stringify(object));
+        } else if (isJsonLd) {
+          //Newline-delimited JSON-LD, one line per RDF Message, per
+          //https://w3c-cg.github.io/rsp/spec/messages#json-ld -- only
+          //meaningful for a message-framed source; otherwise (no messages
+          //at all) there's just the one JSON-LD document for the whole graph.
+          if (response.messages.length) {
+            response.messages.forEach(function (message) {
+              console.log(JSON.stringify(fetch.messageToJsonLd(message)));
+            });
+          } else {
+            console.log(JSON.stringify(fetch.quadsToJsonLdGraph(response.triples)));
+          }
         } else {
           //Prefixes discovered in the source (e.g. Turtle/TriG @prefix,
           //SHACL-C's defaults, Jelly-RDF's namespace table, ...) are only
@@ -112,7 +147,15 @@ var processPage = async function (pageUrl) {
             prefixesWritten = true;
             writer.addPrefixes(response.prefixes);
           }
-          writer.addQuads(response.triples);
+          //A message-framed source (see the comment above canStream) writes
+          //as a proper RDF Message Log the same way the streaming path
+          //above does, just one whole message at a time instead of quad by
+          //quad, since all of it is already sitting in memory here anyway.
+          if (response.messages.length) {
+            response.messages.forEach(function (message) { writer.addMessage(message); });
+          } else {
+            writer.addQuads(response.triples);
+          }
         }
       }
       for (let triple of response.triples) {

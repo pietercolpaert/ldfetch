@@ -679,14 +679,21 @@ document.addEventListener('DOMContentLoaded', function () {
     ].join('\n');
   }
 
-  function cliSnippet(url, frame) {
+  // The playground's own format keys (trig/nquads/jsonld) match OUTPUT_FORMATS
+  // and CodeMirror mode names; the CLI's --format takes 'json-ld' (hyphenated)
+  // for the same thing.
+  var CLI_FORMAT_NAMES = { jsonld: 'json-ld' };
+
+  function cliSnippet(url, frame, formatName) {
     if (frame) {
       return [
         "echo '" + JSON.stringify(frame) + "' > frame.json",
         'npx ldfetch ' + url + ' --frame frame.json'
       ].join('\n');
     }
-    return 'npx ldfetch ' + url;
+    var cliFormat = CLI_FORMAT_NAMES[formatName] || formatName;
+    var formatFlag = cliFormat && cliFormat !== 'trig' ? ' --format ' + cliFormat : '';
+    return 'npx ldfetch ' + url + formatFlag;
   }
 
   function setStatus(statusText, isError) {
@@ -767,29 +774,42 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     var quadCount = 0;
-    // Jelly-RDF's 'message' event fires before the individual quads it
-    // contains reach 'quad' (verified: message, then its quads). Once we
-    // know a source is message-framed, the flat output panel gets hidden
-    // anyway ("when messages, only have the messages output"), so feeding
-    // it quad-by-quad is wasted work -- and for a source with hundreds of
-    // thousands of quads, that waste alone is enough to hang the tab. Stop
-    // as soon as we see the first message.
+    // A message-framed source tags every 'quad' event with the RDF Message
+    // it belongs to (messageCounter, undefined for ordinary quads) -- given
+    // from the very first quad, not just once a 'message' event confirms
+    // it, since messageCounter is what lets the writer produce a proper RDF
+    // Message Log below (see issue #59's follow-up): rdf-writer-ts's
+    // addQuad({ quad, messageCounter }) form writes the VERSION/MESSAGE
+    // delimiters itself, filling in empty messages from gaps in the
+    // counter. Once we know a source is message-framed, per-quad whole-
+    // document visualization is skipped (the flat editor keeps growing via
+    // the writer instead; the visualization switches to per-message scope
+    // via renderMessage()'s setScope() calls) -- for a source with hundreds
+    // of thousands of quads, feeding them all to the whole-document view
+    // too would be wasted work, enough on its own to hang the tab.
     var messageModeDetected = false;
-    fetcher.on('quad', function (quad) {
-      if (messageModeDetected) return;
+    fetcher.on('quad', function (quad, messageCounter) {
       quadCount++;
+      if (messageCounter !== undefined) {
+        if (!messageModeDetected) {
+          messageModeDetected = true;
+          visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
+        }
+        if (writer) writer.addQuad({ quad: quad, messageCounter: messageCounter });
+        return;
+      }
       visualizationWorkbench.addQuad(quad);
       if (writer) writer.addQuad(quad);
       setStatus('Fetching … ' + quadCount + ' triple' + (quadCount === 1 ? '' : 's') + ' so far');
     });
     fetcher.on('message', function (quadsInMessage) {
-      if (!messageModeDetected) {
-        messageModeDetected = true;
-        outputCm.setValue('');
-        visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
-      }
-      quadCount += quadsInMessage.length;
       receiveMessage(quadsInMessage);
+      // NDJSON-LD, one line per message (see messageToJsonLd) -- skipped
+      // when a custom frame is requested instead, which needs the whole
+      // graph as one document (applied once the fetch completes, below).
+      if (!useFrame && formatName === 'jsonld') {
+        appendToEditor(outputCm, JSON.stringify(fetcher.messageToJsonLd(quadsInMessage)) + '\n');
+      }
       var total = windowStartIndex + currentMessages.length + pendingMessages.length;
       setStatus('Fetching … ' + quadCount + ' triple' + (quadCount === 1 ? '' : 's') + ' in ' + total + ' message' + (total === 1 ? '' : 's') + ' so far');
     });
@@ -798,22 +818,30 @@ document.addEventListener('DOMContentLoaded', function () {
       if (writer) writer.end();
       renderPrefixes(documentPrefixes);
       finishMessages();
-      // RDF Messages are a sequence of discrete messages, not one document --
-      // when the source is message-framed, the slider below is the whole
-      // story, so skip the flat merged/framed output entirely.
+      // A message-framed source keeps the flat output panel too, now
+      // showing the whole thing as a proper RDF Message Log (TriG/N-Quads)
+      // or NDJSON-LD (already written live above, one line/message) --
+      // alongside the slider below for browsing message by message. A
+      // custom frame still needs the whole graph as one document instead,
+      // ignoring message boundaries, same as the non-message case below.
       var hasMessages = currentMessages.length > 0;
-      outputPanel.hidden = hasMessages;
       codeJsEl.textContent = jsSnippet(url, frame, hasMessages);
-      codeCliEl.textContent = cliSnippet(url, frame);
+      codeCliEl.textContent = cliSnippet(url, frame, formatName);
 
       if (hasMessages) {
+        outputHint.textContent = formatName === 'jsonld' ? '(NDJSON-LD: one JSON object per message)' : '(RDF Message Log: MESSAGE-delimited)';
+      }
+
+      if (hasMessages && !useFrame) {
         var messageTotal = windowStartIndex + currentMessages.length + pendingMessages.length;
         setStatus('Done: ' + response.triples.length + ' triples in ' + messageTotal + ' messages from ' + response.url);
         fetchBtn.disabled = false;
         return;
       }
 
-      visualizationWorkbench.complete(response.triples, Object.assign({}, COMMON_PREFIXES, documentPrefixes), 'loaded document');
+      if (!hasMessages) {
+        visualizationWorkbench.complete(response.triples, Object.assign({}, COMMON_PREFIXES, documentPrefixes), 'loaded document');
+      }
 
       if (formatName !== 'jsonld') {
         setStatus('Done: ' + response.triples.length + ' triples from ' + response.url);
@@ -827,7 +855,8 @@ document.addEventListener('DOMContentLoaded', function () {
       var jsonLdFrame = frame || { '@graph': {} };
       return fetcher.frame(response.triples, jsonLdFrame).then(function (jsonLd) {
         outputCm.setValue(JSON.stringify(jsonLd, null, 2));
-        setStatus('Done: ' + response.triples.length + ' triples from ' + response.url);
+        var messageNote = hasMessages ? ' in ' + (windowStartIndex + currentMessages.length + pendingMessages.length) + ' messages' : '';
+        setStatus('Done: ' + response.triples.length + ' triples' + messageNote + ' from ' + response.url);
         fetchBtn.disabled = false;
       });
     }).catch(function (error) {
