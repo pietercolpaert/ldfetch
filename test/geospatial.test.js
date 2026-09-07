@@ -33,6 +33,31 @@ test('message scopes keep repeated subject coordinates separate', () => {
   assert.deepEqual(result.features.map(f => f.properties.message), [1, 2]);
 });
 
+test('blank-node geometries inherit only one unambiguous named owner', () => {
+  const geo = 'http://www.opengis.net/ont/geosparql#';
+  const rdfs = 'http://www.w3.org/2000/01/rdf-schema#';
+  const feature = df.namedNode('https://example.org/feature');
+  const other = df.namedNode('https://example.org/other');
+  const geometry = df.blankNode('geometry');
+  const ambiguous = df.blankNode('ambiguous');
+  const index = new DatasetIndex({ geo, rdfs });
+  index.addAll([
+    df.quad(feature, df.namedNode(rdfs + 'label'), df.literal('Named feature')),
+    df.quad(feature, df.namedNode(geo + 'hasGeometry'), geometry),
+    df.quad(geometry, df.namedNode(geo + 'asWKT'), df.literal('POINT (4 50)', df.namedNode(geo + 'wktLiteral'))),
+    df.quad(feature, df.namedNode('https://example.org/location'), ambiguous),
+    df.quad(other, df.namedNode('https://example.org/location'), ambiguous),
+    df.quad(ambiguous, df.namedNode(geo + 'asWKT'), df.literal('POINT (5 51)', df.namedNode(geo + 'wktLiteral')))
+  ]);
+
+  const result = extract(index);
+  assert.equal(result.features[0].properties.entity, 'NamedNode|https://example.org/feature');
+  assert.equal(result.features[0].properties.label, 'Named feature');
+  assert.equal(result.features[1].properties.entity, 'BlankNode|ambiguous');
+  assert.equal(result.features[1].properties.entityUrl, '');
+  assert.equal(result.features[1].properties.label, '_:ambiguous');
+});
+
 test('ranking hides redundant and generic views from recommendations', () => {
   const available = ['iiif', 'images', 'overview', 'relationships', 'profile', 'forms', 'map'].map(id => ({ module: { id } }));
   const ranked = rankViews(available);

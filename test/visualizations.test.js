@@ -74,3 +74,25 @@ test('RDF TSS JSON subpoints become ordered time-series points', () => {
   assert.deepEqual(series[0].points.map(point => point.pointId), ['stage-1200', 'stage-1215']);
   assert.equal(series[0].points[1].value, 29.66);
 });
+
+test('blank nodes render as bounded nested descriptions and never as entity links', () => {
+  const ex = 'https://example.test/';
+  const index = new DatasetIndex({ ex });
+  const owner = dataModel.namedNode(ex + 'owner');
+  const address = dataModel.blankNode('address');
+  const nested = dataModel.blankNode('nested');
+  index.addAll([
+    dataModel.quad(owner, dataModel.namedNode(ex + 'address'), address),
+    dataModel.quad(address, dataModel.namedNode(ex + 'street'), dataModel.literal('Main Street')),
+    dataModel.quad(address, dataModel.namedNode(ex + 'nested'), nested),
+    dataModel.quad(nested, dataModel.namedNode(ex + 'value'), dataModel.literal('Inside'))
+  ]);
+
+  const entities = createRegistry().find(module => module.id === 'entities');
+  const html = entities.render(index, { filter: '' });
+  assert.ok(html.includes('data-blank-toggle'));
+  assert.ok(html.includes('Main Street'));
+  assert.ok(html.includes('_:nested'));
+  assert.ok(!html.includes('data-entity="BlankNode|'));
+  assert.ok(!html.includes('data-select-entity="BlankNode|'));
+});

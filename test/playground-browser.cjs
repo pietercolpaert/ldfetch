@@ -42,6 +42,11 @@ const puppeteer = require('puppeteer-core');
       res.end('<https://example.org/member> <http://www.w3.org/2000/01/rdf-schema#label> "Loaded next page".');
       return;
     }
+    if (req.url === '/blank-nodes.ttl') {
+      res.setHeader('Content-Type', 'text/turtle');
+      res.end('@prefix geo: <http://www.opengis.net/ont/geosparql#>. @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>. @prefix ex: <https://example.org/>. ex:feature rdfs:label "Named blank-node geometry"; ex:address [ ex:street "Main Street" ]; geo:hasGeometry _:geometry. _:geometry geo:asWKT "POINT (4 50)"^^geo:wktLiteral. ex:first ex:place _:ambiguous. ex:second ex:place _:ambiguous. _:ambiguous geo:asWKT "POINT (5 51)"^^geo:wktLiteral.');
+      return;
+    }
     const file = path.join(root, decodeURIComponent(new URL(req.url, 'http://localhost').pathname));
     const target = file === root + '/' ? path.join(root, 'index.html') : file;
     const ext = path.extname(target);
@@ -90,6 +95,22 @@ const puppeteer = require('puppeteer-core');
     assert.ok(await page.$eval('.feature-popup', el => el.textContent.includes('Brussels') && el.textContent.includes('rdfs:label')));
     assert.deepEqual(await page.$$eval('.feature-popup dt', nodes => nodes.map(node => node.textContent).filter(name => ['Geometry', 'Message', 'CRS'].includes(name))), []);
     assert.equal(await page.$eval('.feature-popup h3 a', el => el.href), 'https://example.org/globe/brussels');
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'blank-nodes.ttl') + '&pane=explore&view=map');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/blank-nodes.ttl'));
+    await page.waitForSelector('.geometry-list');
+    assert.equal(await page.$eval('.geometry-list button', el => el.textContent), 'Named blank-node geometry');
+    assert.ok(await page.$eval('.geometry-list', el => el.textContent.includes('_:ambiguous')));
+    assert.equal(await page.$$eval('#visualization-workbench [data-entity^="BlankNode|"], #visualization-workbench [data-select-entity^="BlankNode|"]', nodes => nodes.length), 0);
+    await page.click('.geometry-list button');
+    await page.waitForSelector('[data-entity-details] [data-blank-toggle]');
+    assert.equal(await page.$eval('[data-entity-details] .blank-node-properties', el => el.hidden), true);
+    await page.click('[data-entity-details] [data-blank-toggle]');
+    assert.equal(await page.$eval('[data-entity-details] .blank-node-properties', el => el.hidden), false);
+    assert.ok(await page.$eval('[data-entity-details] .blank-node-properties', el => el.textContent.includes('Main Street')));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/geospatial-messages.trig'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('geospatial-messages.trig'));
+    await page.click('#explore-tab');
+    await page.waitForFunction(() => document.querySelector('[data-globe]')?._globe?.getSource('features'), { timeout: 30000 });
     await page.evaluate(() => { window.originalGlobe = document.querySelector('[data-globe]')._globe; });
     await page.screenshot({ path: '/tmp/ldfetch-globe.png', fullPage: true });
     await page.select('#message-scope', 'memory');

@@ -84,22 +84,48 @@ function extract(index) {
   const groups = index.messageGroups || [{ quads: index.quads, message: null }];
   groups.forEach(group => {
     const subjects = new Map();
-    const owners = new Map();
+    const incoming = new Map();
     group.quads.forEach(q => {
       if (!subjects.has(key(q.subject))) subjects.set(key(q.subject), []);
       subjects.get(key(q.subject)).push(q);
-      if ([GEO + 'hasGeometry', GEO + 'hasDefaultGeometry', ...SCHEMA.map(ns => ns + 'geo')].includes(q.predicate.value)) owners.set(key(q.object), q.subject);
+      if (q.object.termType !== 'Literal') {
+        const links = incoming.get(key(q.object)) || [];
+        links.push(q);
+        incoming.set(key(q.object), links);
+      }
     });
+    // A blank node is structural, not an independently navigable feature.
+    // Promote it through a uniquely owned chain only; ambiguity is preserved
+    // as an inert blank-node identifier instead of guessed away.
+    function resolveOwner(term, seen) {
+      seen = seen || new Set();
+      const termKey = key(term);
+      if (seen.has(termKey) || seen.size >= 8) return term;
+      seen.add(termKey);
+      const links = incoming.get(termKey) || [];
+      if (term.termType === 'NamedNode') {
+        const geometryLinks = links.filter(link => [GEO + 'hasGeometry', GEO + 'hasDefaultGeometry', ...SCHEMA.map(ns => ns + 'geo')].includes(link.predicate.value));
+        return geometryLinks.length === 1 ? resolveOwner(geometryLinks[0].subject, seen) : term;
+      }
+      if (term.termType !== 'BlankNode') return term;
+      return links.length === 1 ? resolveOwner(links[0].subject, seen) : term;
+    }
+    function issueFor(term, reason, source) {
+      const owner = resolveOwner(term);
+      issues.push({ entity: key(owner), label: owner.termType === 'BlankNode' ? '_:' + owner.value : index.label(owner), message: group.message, reason, source });
+    }
     function add(q, geometry, crs) {
-      const owner = owners.get(key(q.subject)) || q.subject;
-      const details = (subjects.get(key(owner)) || []).filter(item => item.predicate.value !== GEO + 'asWKT' && item.predicate.value !== GEO + 'asGeoJSON').map(item => {
+      const owner = resolveOwner(q.subject);
+      const geometryLinks = [GEO + 'hasGeometry', GEO + 'hasDefaultGeometry', ...SCHEMA.map(ns => ns + 'geo')];
+      const supporting = (subjects.get(key(owner)) || []).concat(owner !== q.subject ? (subjects.get(key(q.subject)) || []) : []);
+      const details = supporting.filter(item => item.predicate.value !== GEO + 'asWKT' && item.predicate.value !== GEO + 'asGeoJSON' && !geometryLinks.includes(item.predicate.value)).map(item => {
         const fullValue = item.object.termType === 'Literal' ? item.object.value : index.compact(item.object.value);
         return { name: index.compact(item.predicate.value), value: fullValue.length > 240 ? fullValue.slice(0, 237) + '…' : fullValue };
       }).filter((item, position, all) => all.findIndex(other => other.name === item.name && other.value === item.value) === position).slice(0, 8);
       features.push({ type: 'Feature', id: features.length, geometry, properties: {
         entity: key(owner),
         entityUrl: owner.termType === 'NamedNode' ? owner.value : '',
-        geometryEntity: key(q.subject), label: index.label(owner),
+        geometryEntity: key(q.subject), label: owner.termType === 'BlankNode' ? '_:' + owner.value : index.label(owner),
         message: group.message, crs, source: q.object.value, details: JSON.stringify(details)
       } });
     }
@@ -120,7 +146,7 @@ function extract(index) {
           if (shape.kind !== 'line' && points.length && JSON.stringify(points[0]) !== JSON.stringify(points[points.length - 1])) points.push(points[0].slice());
           const geometry = shape.kind === 'line' ? { type: 'LineString', coordinates: points } : { type: 'Polygon', coordinates: [points] };
           add(q, transformGeometry(geometry, p => p), CRS84);
-        } catch (error) { issues.push({ entity: key(q.subject), message: group.message, reason: error.message, source: q.object.value }); }
+        } catch (error) { issueFor(q.subject, error.message, q.object.value); }
         return;
       }
       if (q.predicate.value !== GEO + 'asWKT' && dt !== GEO + 'wktLiteral' && q.predicate.value !== GEO + 'asGeoJSON' && dt !== GEO + 'geoJSONLiteral') return;
@@ -133,7 +159,7 @@ function extract(index) {
           const parsed = parseWkt(q.object.value);
           add(q, parsed.geometry, parsed.crs);
         }
-      } catch (error) { issues.push({ entity: key(q.subject), message: group.message, reason: error.message, source: q.object.value }); }
+      } catch (error) { issueFor(q.subject, error.message, q.object.value); }
     });
     subjects.forEach(quads => {
       [[WGS + 'lat', WGS + 'long'], [WGS + 'lat', WGS + 'lon']].concat(SCHEMA.map(ns => [ns + 'latitude', ns + 'longitude'])).forEach(pair => {
@@ -141,14 +167,14 @@ function extract(index) {
         const longitudes = quads.filter(q => q.predicate.value === pair[1]);
         if (!latitudes.length || !longitudes.length) return;
         if (latitudes.length > 1 || longitudes.length > 1) {
-          issues.push({ entity: key(quads[0].subject), reason: 'Ambiguous coordinate pairs', message: group.message }); return;
+          issueFor(quads[0].subject, 'Ambiguous coordinate pairs'); return;
         }
         latitudes.forEach(lat => longitudes.forEach(lon => {
           try {
             if (!lat.object.value.trim() || !lon.object.value.trim()) throw new Error('Empty coordinate');
             const geometry = transformGeometry({ type: 'Point', coordinates: [Number(lon.object.value), Number(lat.object.value)] }, p => p);
             add(lat, geometry, CRS84);
-          } catch (error) { issues.push({ entity: key(lat.subject), reason: error.message, message: group.message }); }
+          } catch (error) { issueFor(lat.subject, error.message); }
         }));
       });
     });
@@ -251,7 +277,7 @@ function mount(container, collection, select, camera, onCamera) {
         if (hits.length) {
           focusFeature(hits[0], 900);
           showFeaturePopup(hits[0], event.lngLat);
-          select(hits[0].properties.entity);
+          if (String(hits[0].properties.entity).startsWith('NamedNode|')) select(hits[0].properties.entity);
         }
       });
       status.textContent = collection.features.length + ' geometries · drag to rotate, scroll to zoom';

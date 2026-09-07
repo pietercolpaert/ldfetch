@@ -177,13 +177,50 @@ function safeUrl(value) {
   } catch (error) { return ''; }
 }
 
-function termHtml(index, term) {
+function blankNodeId(term) {
+  return '_:' + String(term && term.value || 'blank');
+}
+
+function selectAttr(term, name) {
+  return term && term.termType === 'NamedNode' ? ' ' + (name || 'data-select-entity') + '="' + esc(termKey(term)) + '"' : '';
+}
+
+function blankNodeHtml(index, term, depth, seen) {
+  depth = depth || 0;
+  seen = seen || {};
+  var id = blankNodeId(term);
+  var entity = index.entity(term);
+  var key = termKey(term);
+  if (!entity || depth >= 2 || seen[key]) return '<span class="blank-node-id">' + esc(id) + '</span>';
+  var nextSeen = Object.assign({}, seen); nextSeen[key] = true;
+  var rows = [];
+  entity.properties.forEach(function (terms, predicate) {
+    if (rows.length >= 6) return;
+    var shown = terms.slice(0, 3).map(function (value) {
+      if (value.termType === 'Literal' && value.value.length > 180) {
+        var shortened = Object.assign({}, value, { value: value.value.slice(0, 177) + '…' });
+        return termHtml(index, shortened, depth + 1, nextSeen);
+      }
+      return termHtml(index, value, depth + 1, nextSeen);
+    }).join('<br>');
+    if (terms.length > 3) shown += '<br><small>+' + (terms.length - 3) + ' more values</small>';
+    rows.push('<span class="blank-node-row"><b>' + esc(index.compact(predicate)) + '</b><span>' + shown + '</span></span>');
+  });
+  var label = index.label(entity);
+  var summary = label && label !== term.value ? label : id;
+  if (!rows.length) return '<span class="blank-node-id">' + esc(summary) + '</span>';
+  var omitted = entity.properties.size > rows.length ? '<small>+' + (entity.properties.size - rows.length) + ' more properties</small>' : '';
+  return '<span class="blank-node-description"><span class="blank-node-summary">' + esc(summary) + ' <small>blank node</small></span><button type="button" class="blank-node-toggle" data-blank-toggle aria-expanded="false">Show details</button><span class="blank-node-properties" hidden>' + rows.join('') + omitted + '</span></span>';
+}
+
+function termHtml(index, term, depth, seen) {
   if (!term) return '';
   if (term.termType === 'Literal') {
     var suffix = term.language ? ' <small>@' + esc(term.language) + '</small>' :
       (term.datatype && term.datatype.value !== XSD + 'string' ? ' <small>^^' + esc(index.compact(term.datatype.value)) + '</small>' : '');
     return '<span class="literal">' + esc(term.value) + '</span>' + suffix;
   }
+  if (term.termType === 'BlankNode') return blankNodeHtml(index, term, depth, seen);
   var key = termKey(term);
   return '<button type="button" class="entity-link" data-entity="' + esc(key) + '" title="' + esc(term.value) + '">' + esc(index.label(term)) + '</button>';
 }
@@ -275,12 +312,12 @@ function profilesModule() {
         var roles = propertyValues(index, entity, [SCHEMA[0] + 'jobTitle', SCHEMA[1] + 'jobTitle', VCARD + 'role']);
         var affiliations = index.values(entity, [SCHEMA[0] + 'affiliation', SCHEMA[1] + 'affiliation', ORG + 'memberOf']);
         var contacts = index.values(entity, [FOAF + 'mbox', SCHEMA[0] + 'email', SCHEMA[1] + 'email', VCARD + 'hasEmail', SCHEMA[0] + 'telephone', SCHEMA[1] + 'telephone', VCARD + 'hasTelephone']);
-        return '<article class="profile-card" data-select-entity="' + esc(termKey(entity.term)) + '">' +
+        return '<article class="profile-card"' + selectAttr(entity.term) + '>' +
           (image ? '<img src="' + esc(image) + '" alt="Portrait of ' + esc(index.label(entity)) + '" loading="lazy" referrerpolicy="no-referrer">' : '<div class="profile-placeholder" aria-hidden="true">' + esc(index.label(entity).charAt(0).toUpperCase() || '?') + '</div>') +
           '<div><h3>' + esc(index.label(entity)) + '</h3>' + (description ? '<p>' + esc(description) + '</p>' : '') +
           (roles.length ? '<p class="profile-meta"><b>Role</b> ' + esc(roles.join(', ')) + '</p>' : '') +
           (affiliations.length ? '<p class="profile-meta"><b>Affiliation</b> ' + affiliations.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
-          (contacts.length ? '<div class="profile-links">' + contacts.map(function (term) { var url = safeContactUrl(term.value); return url ? '<a href="' + esc(url) + '">' + esc(url.indexOf('tel:') === 0 ? 'Call' : 'Email') + '</a>' : '<span>' + esc(term.value) + '</span>'; }).join('') + '</div>' : '') +
+          (contacts.length ? '<div class="profile-links">' + contacts.map(function (term) { if (term.termType === 'BlankNode') return termHtml(index, term); var url = safeContactUrl(term.value); return url ? '<a href="' + esc(url) + '">' + esc(url.indexOf('tel:') === 0 ? 'Call' : 'Email') + '</a>' : '<span>' + esc(term.value) + '</span>'; }).join('') + '</div>' : '') +
           (homepage && safeUrl(homepage) ? '<a href="' + esc(safeUrl(homepage)) + '" target="_blank" rel="noopener">Website</a>' : '') + '</div></article>';
       }).join('');
       return '<p class="view-count">' + found.length + ' ' + (found.length === 1 ? 'person' : 'people') + ' described</p><div class="profile-grid">' + cards + '</div>';
@@ -333,11 +370,11 @@ function shaclModule() {
       var nodeShapes = found.filter(function (shape) { return index.hasType(shape, SH + 'NodeShape') || index.values(shape, [SH + 'targetClass', SH + 'targetNode', SH + 'property']).length; });
       var diagrams = nodeShapes.map(function (shape) {
         var propertyShapes = index.values(shape, SH + 'property');
-        return '<div class="shape-flow"><button type="button" class="shape-node main" data-entity="' + esc(termKey(shape.term)) + '">' + esc(index.label(shape)) + '</button>' +
+        return '<div class="shape-flow">' + (shape.term.termType === 'NamedNode' ? '<button type="button" class="shape-node main" data-entity="' + esc(termKey(shape.term)) + '">' + esc(index.label(shape)) + '</button>' : '<span class="shape-node main">' + esc(blankNodeId(shape.term)) + '</span>') +
           (propertyShapes.length ? '<div class="shape-branches">' + propertyShapes.map(function (propertyTerm) {
             var property = index.entity(propertyTerm);
             var path = property ? index.values(property, SH + 'path')[0] : null;
-            return '<div><span>' + esc(path ? index.compact(path.value) : 'property') + '</span><button type="button" class="shape-node" data-entity="' + esc(termKey(propertyTerm)) + '">' + esc(index.label(propertyTerm)) + '</button></div>';
+            return '<div><span>' + esc(path ? index.compact(path.value) : 'property') + '</span>' + (propertyTerm.termType === 'NamedNode' ? '<button type="button" class="shape-node" data-entity="' + esc(termKey(propertyTerm)) + '">' + esc(index.label(propertyTerm)) + '</button>' : '<span class="shape-node">' + esc(blankNodeId(propertyTerm)) + '</span>') + '</div>';
           }).join('') + '</div>' : '') + '</div>';
       }).join('');
       var cards = found.map(function (shape) {
@@ -348,7 +385,7 @@ function shaclModule() {
         constraints.forEach(function (predicate) {
           index.values(shape, predicate).forEach(function (value) { badges.push('<span><b>' + esc(index.compact(predicate)) + '</b> ' + termHtml(index, value) + '</span>'); });
         });
-        return '<article class="shape-card" data-select-entity="' + esc(termKey(shape.term)) + '"><h3>' + esc(index.label(shape)) + '</h3>' +
+        return '<article class="shape-card"' + selectAttr(shape.term) + '><h3>' + esc(index.label(shape)) + '</h3>' +
           (target ? '<p><b>targets</b> ' + target + '</p>' : '') + (path ? '<p><b>path</b> ' + path + '</p>' : '') +
           (badges.length ? '<div class="constraint-badges">' + badges.join('') + '</div>' : '') +
           (propertyShapes.length ? '<p><b>properties</b> ' + propertyShapes.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
@@ -411,7 +448,7 @@ function credentialsModule() {
         var credentialStatus = index.values(credential, VC + 'credentialStatus');
         var validFrom = firstValue(index, credential, VC + 'validFrom');
         var validUntil = firstValue(index, credential, VC + 'validUntil');
-        return '<article class="credential-card" data-select-entity="' + esc(termKey(credential.term)) + '"><div class="credential-status">Not checked</div><h3>' + esc(index.label(credential)) + '</h3>' +
+        return '<article class="credential-card"' + selectAttr(credential.term) + '><div class="credential-status">Not checked</div><h3>' + esc(index.label(credential)) + '</h3>' +
           (issuer.length ? '<p><b>Issuer</b> ' + issuer.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
           (holders.length ? '<p><b>Holder</b> ' + holders.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
           (subjects.length ? '<p><b>Subject</b> ' + subjects.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
@@ -434,8 +471,11 @@ function geographyModule() {
       state.mapData = data;
       return '<div class="globe-view"><div class="view-actions"><button class="action-button" data-globe-home>Whole Earth</button><button class="action-button secondary" data-globe-fit>Fit geometries</button></div><div class="globe" data-globe aria-label="Interactive spherical Earth"></div><p data-map-status role="status">Loading globe…</p></div>' +
         '<div class="geometry-list"><h3>' + data.features.length + ' geometries in this scope</h3>' + data.features.map(function (f) {
-          return '<p><button class="entity-link" data-entity="' + esc(f.properties.entity) + '" data-geometry-id="' + esc(f.id) + '">' + esc(f.properties.label) + '</button> · ' + esc(f.geometry.type) + (f.properties.message !== null ? ' · message ' + f.properties.message : '') + '</p>';
-        }).join('') + '</div>' + (data.issues.length ? '<details class="geometry-issues"><summary>' + data.issues.length + ' geometries could not be plotted</summary>' + data.issues.map(function (issue) { return '<p><button class="entity-link" data-entity="' + esc(issue.entity) + '">Inspect source</button> ' + esc(issue.reason) + '</p>'; }).join('') + '</details>' : '');
+          var label = f.properties.entityUrl ? '<button class="entity-link" data-entity="' + esc(f.properties.entity) + '" data-geometry-id="' + esc(f.id) + '">' + esc(f.properties.label) + '</button>' : '<span class="blank-node-id">' + esc(f.properties.label) + '</span>';
+          return '<p>' + label + ' · ' + esc(f.geometry.type) + (f.properties.message !== null ? ' · message ' + f.properties.message : '') + '</p>';
+        }).join('') + '</div>' + (data.issues.length ? '<details class="geometry-issues"><summary>' + data.issues.length + ' geometries could not be plotted</summary>' + data.issues.map(function (issue) {
+          return '<p>' + (issue.entity.indexOf('NamedNode|') === 0 ? '<button class="entity-link" data-entity="' + esc(issue.entity) + '">Inspect source</button>' : '<span class="blank-node-id">' + esc(issue.label || issue.entity.replace(/^BlankNode\|/, '_:')) + '</span>') + ' ' + esc(issue.reason) + '</p>';
+        }).join('') + '</details>' : '');
     }
   };
 }
@@ -462,7 +502,7 @@ function temporalModule() {
       var span = Math.max(1, max - min);
       var marks = found.map(function (item) {
         var left = 2 + ((item.time - min) / span) * 96;
-        return '<button type="button" class="timeline-mark" data-entity="' + esc(termKey(item.quad.subject)) + '" style="left:' + left.toFixed(2) + '%" title="' + esc(index.label(item.quad.subject) + ': ' + item.quad.object.value) + '"></button>';
+        return item.quad.subject.termType === 'NamedNode' ? '<button type="button" class="timeline-mark" data-entity="' + esc(termKey(item.quad.subject)) + '" style="left:' + left.toFixed(2) + '%" title="' + esc(index.label(item.quad.subject) + ': ' + item.quad.object.value) + '"></button>' : '<span class="timeline-mark inert" style="left:' + left.toFixed(2) + '%" title="' + esc(blankNodeId(item.quad.subject) + ': ' + item.quad.object.value) + '"></span>';
       }).join('');
       return '<div class="timeline-axis">' + marks + '</div><div class="timeline-labels"><span>' + esc(new Date(min).toISOString()) + '</span><span>' + esc(new Date(max).toISOString()) + '</span></div>' + entityTable(index, uniqueTerms(found.map(function (item) { return item.quad.subject; })).map(function (term) { return index.entity(term); }).filter(Boolean), '', 100);
     }
@@ -537,7 +577,8 @@ function timeSeriesModule() {
         var marks = points.map(function (point) {
           var x = 20 + (point.time - minTime) / timeSpan * 560;
           var y = 170 - (point.value - minValue) / valueSpan * 140;
-          return '<circle tabindex="0" role="button" class="time-series-point" data-entity="' + esc(point.entity) + '" data-point-id="' + esc(point.pointId) + '" data-time="' + esc(point.timeLabel) + '" data-value="' + esc(point.value) + '" cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) + '" r="4"><title>' + esc(series.label + ' · ' + point.timeLabel + ' · ' + point.value) + '</title></circle>';
+          var selectable = point.entity.indexOf('NamedNode|') === 0;
+          return '<circle' + (selectable ? ' tabindex="0" role="button" data-entity="' + esc(point.entity) + '"' : '') + ' class="time-series-point' + (selectable ? '' : ' inert') + '" data-point-id="' + esc(point.pointId) + '" data-time="' + esc(point.timeLabel) + '" data-value="' + esc(point.value) + '" cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) + '" r="4"><title>' + esc(series.label + ' · ' + point.timeLabel + ' · ' + point.value) + '</title></circle>';
         }).join('');
         return '<section><h3>' + esc(series.label) + '</h3><svg class="time-series-chart" viewBox="0 0 600 190" role="img" aria-label="' + esc(series.label + ', ' + points.length + ' loaded points') + '"><line x1="20" y1="170" x2="580" y2="170"></line><polyline points="' + coordinates + '"></polyline>' + marks + '</svg><div class="time-series-legend"><span>' + esc(points[0].timeLabel) + '</span><b>' + esc(minValue + ' – ' + maxValue) + '</b><span>' + esc(points[points.length - 1].timeLabel) + '</span></div></section>';
       }).join('') + '</div><p class="view-note">Values are plotted directly from loaded RDF TSS points or SOSA observations; no interpolation or unit conversion is applied.</p>';
@@ -588,7 +629,7 @@ function ontologyModule() {
         var parents = index.values(entity, [RDFS + 'subClassOf', RDFS + 'subPropertyOf', OWL + 'equivalentClass', OWL + 'equivalentProperty']);
         var domain = index.values(entity, RDFS + 'domain');
         var range = index.values(entity, RDFS + 'range');
-        return '<article data-select-entity="' + esc(termKey(entity.term)) + '"><h3>' + esc(index.label(entity)) + '</h3>' +
+        return '<article' + selectAttr(entity.term) + '><h3>' + esc(index.label(entity)) + '</h3>' +
           (parents.length ? '<p><b>Extends/equivalent</b> ' + parents.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
           (domain.length ? '<p><b>Domain</b> ' + domain.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
           (range.length ? '<p><b>Range</b> ' + range.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
@@ -620,7 +661,7 @@ function statisticsModule() {
         var max = Math.max.apply(null, item.values.map(function (entry) { return Math.abs(entry.value); }).concat([1]));
         return '<section><h3>' + esc(index.compact(item.predicate)) + '</h3><div class="bar-chart">' + item.values.slice(0, 50).map(function (entry) {
           var width = Math.max(1, Math.abs(entry.value) / max * 100);
-          return '<button type="button" data-entity="' + esc(termKey(entry.quad.subject)) + '" title="' + esc(index.label(entry.quad.subject) + ': ' + entry.value) + '"><span style="width:' + width.toFixed(2) + '%"></span><b>' + esc(index.label(entry.quad.subject)) + '</b><em>' + esc(entry.value) + '</em></button>';
+          return entry.quad.subject.termType === 'NamedNode' ? '<button type="button" data-entity="' + esc(termKey(entry.quad.subject)) + '" title="' + esc(index.label(entry.quad.subject) + ': ' + entry.value) + '"><span style="width:' + width.toFixed(2) + '%"></span><b>' + esc(index.label(entry.quad.subject)) + '</b><em>' + esc(entry.value) + '</em></button>' : '<div class="bar-row inert"><span style="width:' + width.toFixed(2) + '%"></span><b>' + esc(blankNodeId(entry.quad.subject)) + '</b><em>' + esc(entry.value) + '</em></div>';
         }).join('') + '</div></section>';
       }).join('') + '</div><p class="view-note">Bars show raw loaded values; no aggregation or unit conversion has been applied.</p>';
     }
@@ -657,12 +698,12 @@ function iiifModule() {
       return '<div class="presentation-heading">' + (manifests.length ? manifests.map(function (manifest) { return '<h3>' + esc(index.label(manifest)) + '</h3>'; }).join('') : '<h3>IIIF presentation</h3>') + '<span>' + canvases.length + ' canvas' + (canvases.length === 1 ? '' : 'es') + '</span></div>' +
         '<div class="canvas-strip">' + canvases.map(function (canvas, position) {
           var image = imageForCanvas(index, canvas);
-          return '<figure data-select-entity="' + esc(termKey(canvas.term)) + '"><div class="canvas-image">' + (image ? '<img src="' + esc(image.url) + '" alt="' + esc(index.label(canvas)) + '" loading="lazy" referrerpolicy="no-referrer">' : '<div class="image-unavailable">No supported painting image found</div>') + '</div><figcaption><b>' + (position + 1) + '</b> ' + esc(index.label(canvas)) + (image && image.annotation ? '<span>1 loaded annotation</span>' : '') + '</figcaption></figure>';
+          return '<figure' + selectAttr(canvas.term) + '><div class="canvas-image">' + (image ? '<img src="' + esc(image.url) + '" alt="' + esc(index.label(canvas)) + '" loading="lazy" referrerpolicy="no-referrer">' : '<div class="image-unavailable">No supported painting image found</div>') + '</div><figcaption><b>' + (position + 1) + '</b> ' + esc(index.label(canvas)) + (image && image.annotation ? '<span>1 loaded annotation</span>' : '') + '</figcaption></figure>';
         }).join('') + '</div>' + (annotations.length ? '<div class="annotation-list"><h3>Loaded annotations</h3>' + annotations.map(function (annotation) {
           var targets = index.values(annotation, OA + 'hasTarget');
           var bodies = index.values(annotation, OA + 'hasBody');
           var motivations = index.values(annotation, OA + 'motivatedBy');
-          return '<article data-select-entity="' + esc(termKey(annotation.term)) + '"><h4>' + esc(index.label(annotation)) + '</h4>' +
+          return '<article' + selectAttr(annotation.term) + '><h4>' + esc(index.label(annotation)) + '</h4>' +
             (targets.length ? '<p><b>Target</b> ' + targets.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
             (bodies.length ? '<p><b>Body</b> ' + bodies.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
             (motivations.length ? '<p><b>Motivation</b> ' + motivations.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
@@ -749,7 +790,7 @@ function cardsModule(id, title, types, fields, priority) {
           var values = index.values(entity, field.predicates);
           return values.length ? '<p><b>' + esc(field.label) + '</b> ' + values.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '';
         }).join('');
-        return '<article data-select-entity="' + esc(termKey(entity.term)) + '"><h3>' + esc(index.label(entity)) + '</h3>' + rows + '</article>';
+        return '<article' + selectAttr(entity.term) + '><h3>' + esc(index.label(entity)) + '</h3>' + rows + '</article>';
       }).join('') + '</div>';
     }
   };
@@ -806,7 +847,7 @@ function hypermediaModule() {
             return '<li><b>' + esc(variable ? variable.value : 'parameter') + '</b>' + (property ? ' → ' + esc(index.label(property)) : '') + '</li>';
           }).join('') + '</ul>' : '') + '</div>';
         }).join('');
-        return '<article data-select-entity="' + esc(termKey(entity.term)) + '"><h3>' + esc(index.label(entity)) + '</h3>' + metadata +
+        return '<article' + selectAttr(entity.term) + '><h3>' + esc(index.label(entity)) + '</h3>' + metadata +
           (views.length ? '<div class="hypermedia-actions"><b>Entry points</b>' + views.map(function (term) { return loadLink(index, term, 'Load'); }).join('') + '</div>' : '') +
           (members.length ? '<p><b>Loaded members</b> ' + members.length + '</p>' : '') +
           (relationHtml ? '<details open><summary>' + relations.length + ' TREE relation' + (relations.length === 1 ? '' : 's') + '</summary><ul class="relation-controls">' + relationHtml + '</ul></details>' : '') + searchHtml + '</article>';
@@ -1005,6 +1046,15 @@ function createWorkbench(root, options) {
   }
 
   root.addEventListener('click', function (event) {
+    var blankToggle = event.target.closest('[data-blank-toggle]');
+    if (blankToggle) {
+      var properties = blankToggle.parentElement.querySelector('.blank-node-properties');
+      var expanded = blankToggle.getAttribute('aria-expanded') !== 'true';
+      blankToggle.setAttribute('aria-expanded', String(expanded));
+      blankToggle.textContent = expanded ? 'Hide details' : 'Show details';
+      properties.hidden = !expanded;
+      return;
+    }
     var action = event.target.closest('[data-action]');
     if (action && action.dataset.action === 'validate-shacl') {
       action.disabled = true;
@@ -1021,7 +1071,9 @@ function createWorkbench(root, options) {
     if (tab) { state.view = tab.dataset.view; root.querySelector('.more-views').open = false; render(); var focused = root.querySelector('#viewer-tab-' + state.view); if (focused) focused.focus(); notify(); return; }
     var entityTarget = event.target.closest('[data-entity], [data-select-entity]');
     if (entityTarget) {
-      state.entity = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
+      var entityKey = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
+      if (!entityKey || entityKey.indexOf('NamedNode|') !== 0) return;
+      state.entity = entityKey;
       if (entityTarget.dataset.geometryId !== undefined && unmount && unmount.focus) unmount.focus(entityTarget.dataset.geometryId);
       updateInspector(); notify();
     }
