@@ -686,6 +686,14 @@ button {
 .hydra-template { margin-top: .65rem; padding: .65rem; border-radius: 6px; background: #f4f7fa; }
 .hydra-template code { overflow-wrap: anywhere; }
 .hydra-template ul { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: .45rem 0 0; padding: 0; list-style: none; font-size: .76rem; }
+.hydra-search-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: .65rem; margin-top: .75rem; }
+.hydra-search-fields label { display: grid; gap: .2rem; min-width: 0; color: #46596c; font-size: .78rem; font-weight: 700; }
+.hydra-search-fields label > span b { color: #b3452e; }
+.hydra-search-fields input { min-width: 0; width: 100%; border: 1px solid #b7c7d6; border-radius: 5px; background: white; padding: .5rem .6rem; color: var(--text); font: inherit; }
+.hydra-search-fields input:focus { border-color: var(--primary); outline: 2px solid #bcd3e8; outline-offset: 1px; }
+.hydra-search-fields small { color: #748393; font-weight: 400; }
+.hydra-search-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; margin-top: .75rem; }
+.hydra-search-actions [role="status"] { color: #9b3e29; font-size: .76rem; }
 
 .bar-chart { display: grid; gap: 0.3rem; }
 .bar-chart button, .bar-chart .bar-row {

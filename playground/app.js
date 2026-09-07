@@ -117,6 +117,71 @@ var EXAMPLES = {
   owl: {
     url: 'https://www.w3.org/2002/07/owl.ttl'
   },
+  // The Digital Product Passport Ontology (DPPO, Linköping University). The
+  // EU's Digital Product Passport initiative (part of the Ecodesign for
+  // Sustainable Products Regulation) is still too early-stage to have live,
+  // public, CORS-enabled *instance* data -- reference implementations like
+  // Eclipse Tractus-X publish only JSON-LD context/schema files with no
+  // actual node data (zero triples once parsed) -- so this ontology is the
+  // most substantial real, fetchable DPP-related example available today.
+  dpp: {
+    url: 'https://liusemweb.github.io/DPPO/ontology/dpp-core/0.1/dpp-core.ttl'
+  },
+  // Belgium's rail infrastructure manager, via its OpenDataSoft open-data
+  // portal (harvested into data.europa.eu, the EU's open-data portal):
+  // monthly train traction energy consumption. Content-negotiates cleanly
+  // to Turtle/RDF-XML/JSON-LD, and -- unlike most data.europa.eu-hosted
+  // government RDF found while looking for examples here -- actually
+  // enables CORS.
+  'infrabel-energy': {
+    url: 'https://opendata.infrabel.be/api/explore/v2.1/catalog/datasets/maandelijks-tractie-energieverbruik-met-verdeling/exports/turtle'
+  },
+  // An EU Framework Programmes codelist (Euraxess, the EU's researcher-
+  // mobility portal), published by Charles University and catalogued on
+  // data.europa.eu. In N-Quads (one named graph per statement) rather than
+  // TriG, for variety, and -- like the Infrabel example above -- one of the
+  // few data.europa.eu-hosted sources found with CORS enabled.
+  'euraxess-nquads': {
+    url: 'https://data.mff.cuni.cz/soubory/%C4%8D%C3%ADseln%C3%ADky/euraxess-programy-eu.nq'
+  },
+  // Library of Congress's linked-data service for subject/name authorities
+  // -- one of the most widely reused cultural-heritage vocabulary hubs on
+  // the web, and one of the few classic "plain dereferenceable URI" Linked
+  // Data sites (as opposed to a modern JSON API) found to actually enable
+  // CORS.
+  'loc-subject': {
+    url: 'https://id.loc.gov/authorities/subjects/sh85118553.rdf'
+  },
+  // GeoNames, the canonical open gazetteer: the geographic feature "Paris",
+  // with dozens of alternate names in different languages/scripts plus
+  // WGS84 coordinates.
+  'geonames-paris': {
+    url: 'https://sws.geonames.org/2988507/about.rdf'
+  },
+  // ORCID's own official fictitious demo researcher, "Josiah Carberry" -- a
+  // running joke used by ORCID/CrossRef since 1929 for exactly this kind of
+  // demonstration. Needs a real Accept header (a bare `*/*` gets a 406 from
+  // ORCID's server), which ldfetch always sends.
+  'orcid-researcher': {
+    url: 'https://pub.orcid.org/experimental_rdf_v1/0000-0002-1825-0097'
+  },
+  // UniProt's own Linked Data core ontology (`up:`), describing protein
+  // entry P12345 (a reviewed malate dehydrogenase) -- one of the largest
+  // and most authoritative scientific Linked Data hubs.
+  'uniprot-protein': {
+    url: 'https://rest.uniprot.org/uniprotkb/P12345.ttl'
+  },
+  // A FHIR (healthcare interoperability) Patient resource, rendered as RDF/
+  // Turtle via FHIR's official RDF mapping, from HL7's public HAPI FHIR R4
+  // test server. Relies on content negotiation (ldfetch's Accept header)
+  // rather than the server's own `?_format=ttl` query param, which instead
+  // returns the legacy, non-standard `application/x-turtle` media type.
+  // That server is shared and publicly writable: the endpoint and RDF
+  // shape stay stable, but this exact resource's content can be
+  // overwritten by other testers over time.
+  'fhir-patient': {
+    url: 'https://hapi.fhir.org/baseR4/Patient/example'
+  },
   'mol-ldes': {
     url: 'https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS.trig'
   },

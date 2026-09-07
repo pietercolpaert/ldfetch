@@ -796,6 +796,24 @@ function cardsModule(id, title, types, fields, priority) {
   };
 }
 
+// Hydra templates use RFC 6570. The advertised search forms encountered by
+// the playground use simple, reserved, query, and query-continuation
+// expressions; keeping expansion local also lets the user inspect the final
+// URL before the normal fetch pipeline follows it.
+function expandHydraTemplate(template, values) {
+  values = values || {};
+  return String(template || '').replace(/\{([+?&]?)([^}]+)\}/g, function (expression, operator, names) {
+    var pairs = names.split(',').map(function (name) { return name.replace(/\*$/, ''); }).filter(function (name) {
+      return Object.prototype.hasOwnProperty.call(values, name) && String(values[name]).length > 0;
+    });
+    if (operator === '?' || operator === '&') {
+      if (!pairs.length) return '';
+      return (operator === '?' ? '?' : '&') + pairs.map(function (name) { return encodeURIComponent(name) + '=' + encodeURIComponent(values[name]); }).join('&');
+    }
+    return pairs.map(function (name) { return operator === '+' ? encodeURI(String(values[name])) : encodeURIComponent(values[name]); }).join(',');
+  });
+}
+
 function hypermediaModule() {
   var types = [LDES + 'EventStream', HYDRA + 'Collection', HYDRA + 'ApiDocumentation', TREE + 'Collection', TREE + 'Node', 'http://rdfs.org/ns/void#Dataset'];
   var controlPredicates = [TREE + 'view', TREE + 'relation', TREE + 'node', TREE + 'member', HYDRA + 'search', HYDRA + 'template', HYDRA + 'next'];
@@ -840,12 +858,27 @@ function hypermediaModule() {
           var search = index.entity(searchTerm);
           var template = search && index.values(search, HYDRA + 'template')[0];
           var mappings = search ? index.values(search, HYDRA + 'mapping') : [];
-          return '<div class="hydra-template"><code>' + esc(template ? template.value : searchTerm.value) + '</code>' + (mappings.length ? '<ul>' + mappings.map(function (mappingTerm) {
+          if (!template || template.termType !== 'Literal') return '<div class="hydra-template"><p class="view-note">This search control has no loaded literal Hydra template.</p>' + termHtml(index, searchTerm) + '</div>';
+          var fields = mappings.map(function (mappingTerm) {
             var mapping = index.entity(mappingTerm);
             var variable = mapping && index.values(mapping, HYDRA + 'variable')[0];
             var property = mapping && index.values(mapping, HYDRA + 'property')[0];
-            return '<li><b>' + esc(variable ? variable.value : 'parameter') + '</b>' + (property ? ' → ' + esc(index.label(property)) : '') + '</li>';
-          }).join('') + '</ul>' : '') + '</div>';
+            var required = mapping && index.values(mapping, HYDRA + 'required')[0];
+            return variable ? { variable: variable.value, property: property, required: required && ['true', '1'].indexOf(required.value) !== -1 } : null;
+          }).filter(Boolean);
+          var seenVariables = {};
+          fields.forEach(function (field) { seenVariables[field.variable] = true; });
+          String(template.value).replace(/\{[+?&]?([^}]+)\}/g, function (_, names) {
+            names.split(',').map(function (name) { return name.replace(/\*$/, ''); }).forEach(function (variable) {
+              if (!seenVariables[variable]) { fields.push({ variable: variable, property: null, required: false }); seenVariables[variable] = true; }
+            });
+            return _;
+          });
+          return '<form class="hydra-template hydra-search-form" data-hydra-search data-template="' + esc(template.value) + '"><code>' + esc(template.value) + '</code><div class="hydra-search-fields">' + fields.map(function (field) {
+            var label = field.property ? index.label(field.property) : field.variable;
+            var hint = field.property ? index.compact(field.property.value) : field.variable;
+            return '<label><span>' + esc(label) + (field.required ? ' <b aria-label="required">*</b>' : '') + '</span><input type="text" name="' + esc(field.variable) + '" autocomplete="off" placeholder="' + esc(hint) + '"' + (field.required ? ' required' : '') + '><small>Template variable: ' + esc(field.variable) + '</small></label>';
+          }).join('') + '</div><div class="hydra-search-actions"><button type="submit" class="action-button">Search</button><span role="status" data-hydra-search-status></span></div></form>';
         }).join('');
         return '<article' + selectAttr(entity.term) + '><h3>' + esc(index.label(entity)) + '</h3>' + metadata +
           (views.length ? '<div class="hypermedia-actions"><b>Entry points</b>' + views.map(function (term) { return loadLink(index, term, 'Load'); }).join('') + '</div>' : '') +
@@ -1079,6 +1112,21 @@ function createWorkbench(root, options) {
     }
   });
 
+  root.addEventListener('submit', function (event) {
+    var form = event.target.closest('[data-hydra-search]');
+    if (!form) return;
+    event.preventDefault();
+    var values = {};
+    form.querySelectorAll('input[name]').forEach(function (input) { values[input.name] = input.value.trim(); });
+    var expanded = expandHydraTemplate(form.dataset.template, values);
+    var url = safeUrl(expanded);
+    if (!url) {
+      form.querySelector('[data-hydra-search-status]').textContent = 'The expanded template is not a valid HTTP(S) URL.';
+      return;
+    }
+    if (options.onLoadUrl) options.onLoadUrl(url);
+  });
+
   root.addEventListener('keydown', function (event) {
     var tab = event.target.closest('[data-view]');
     if (!tab || ['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(event.key) === -1) return;
@@ -1170,5 +1218,6 @@ module.exports = {
   rankViews: rankViews,
   createWorkbench: createWorkbench,
   extractTimeSeries: extractTimeSeries,
+  expandHydraTemplate: expandHydraTemplate,
   termKey: termKey
 };

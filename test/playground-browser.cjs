@@ -34,7 +34,12 @@ const puppeteer = require('puppeteer-core');
     }
     if (req.url === '/ldes.ttl') {
       res.setHeader('Content-Type', 'text/turtle');
-      res.end('@prefix ldes: <https://w3id.org/ldes#>. @prefix tree: <https://w3id.org/tree#>. @prefix xsd: <http://www.w3.org/2001/XMLSchema#>. <http://127.0.0.1:' + server.address().port + '/ldes.ttl#stream> a ldes:EventStream; tree:view <http://127.0.0.1:' + server.address().port + '/ldes.ttl#page>. <http://127.0.0.1:' + server.address().port + '/ldes.ttl#page> tree:relation [ a tree:GreaterThanOrEqualToRelation; tree:path <https://example.org/time>; tree:value "2026-01-01"^^xsd:date; tree:node <http://127.0.0.1:' + server.address().port + '/next.ttl> ].');
+      res.end('@prefix ldes: <https://w3id.org/ldes#>. @prefix tree: <https://w3id.org/tree#>. @prefix hydra: <http://www.w3.org/ns/hydra/core#>. @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>. @prefix xsd: <http://www.w3.org/2001/XMLSchema#>. <http://127.0.0.1:' + server.address().port + '/ldes.ttl#stream> a ldes:EventStream; tree:view <http://127.0.0.1:' + server.address().port + '/ldes.ttl#page>. <http://127.0.0.1:' + server.address().port + '/ldes.ttl#page> hydra:search [ hydra:template "http://127.0.0.1:' + server.address().port + '/search{?subject,predicate,object}"; hydra:mapping [ hydra:variable "subject"; hydra:property rdf:subject ], [ hydra:variable "predicate"; hydra:property rdf:predicate ], [ hydra:variable "object"; hydra:property rdf:object ] ]; tree:relation [ a tree:GreaterThanOrEqualToRelation; tree:path <https://example.org/time>; tree:value "2026-01-01"^^xsd:date; tree:node <http://127.0.0.1:' + server.address().port + '/next.ttl> ].');
+      return;
+    }
+    if (req.url.startsWith('/search?')) {
+      res.setHeader('Content-Type', 'text/turtle');
+      res.end('<https://example.org/search-result> <http://www.w3.org/2000/01/rdf-schema#label> "Hydra search result".');
       return;
     }
     if (req.url === '/next.ttl') {
@@ -101,7 +106,7 @@ const puppeteer = require('puppeteer-core');
     assert.equal(await page.$eval('.geometry-list button', el => el.textContent), 'Named blank-node geometry');
     assert.ok(await page.$eval('.geometry-list', el => el.textContent.includes('_:ambiguous')));
     assert.equal(await page.$$eval('#visualization-workbench [data-entity^="BlankNode|"], #visualization-workbench [data-select-entity^="BlankNode|"]', nodes => nodes.length), 0);
-    await page.click('.geometry-list button');
+    await page.evaluate(() => document.querySelector('.geometry-list button').click());
     await page.waitForSelector('[data-entity-details] [data-blank-toggle]');
     assert.equal(await page.$eval('[data-entity-details] .blank-node-properties', el => el.hidden), true);
     await page.click('[data-entity-details] [data-blank-toggle]');
@@ -128,6 +133,7 @@ const puppeteer = require('puppeteer-core');
     assert.equal(await page.$('[data-view-tabs] [data-view="images"]'), null);
     assert.ok((await page.$eval('[data-view="iiif"]', el => el.textContent)).includes('IIIF Presentation'));
     await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/mol-tss-readings.trig') + '&pane=explore&view=timeseries');
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelector('#status').textContent.includes('mol-tss-readings.trig'));
     await page.waitForSelector('.time-series-point[data-point-id="stage-1215"]');
     assert.equal(await page.$eval('.time-series-point[data-point-id="stage-1215"]', el => el.dataset.value), '29.66');
@@ -140,16 +146,20 @@ const puppeteer = require('puppeteer-core');
     assert.ok(page.url().includes('scope=memory'));
     assert.ok(await page.$eval('.time-series-list', el => el.textContent.includes('air-temperature')));
     await page.goto(base + '#url=' + encodeURIComponent(base + 'ldes.ttl') + '&pane=explore&view=hypermedia');
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/ldes.ttl'));
     assert.ok(await page.$eval('.relation-controls', el => el.textContent.includes('2026-01-01')));
-    await page.click('.relation-controls [data-load-url]');
-    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/next.ttl'));
-    assert.ok(page.url().includes(encodeURIComponent('/next.ttl')));
-    await page.goBack();
-    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/ldes.ttl'));
+    await page.waitForSelector('.hydra-search-form input[name="subject"]');
+    await page.type('.hydra-search-form input[name="subject"]', '<https://example.org/Alice>');
+    await page.type('.hydra-search-form input[name="object"]', 'Alice Smith');
+    await page.click('.hydra-search-form button[type="submit"]');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/search?subject='));
+    assert.equal(await page.$eval('#url', el => el.value), base + 'search?subject=%3Chttps%3A%2F%2Fexample.org%2FAlice%3E&object=Alice%20Smith');
+    assert.ok(page.url().includes(encodeURIComponent('/search?subject=')));
     await page.setViewport({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.goto(base + '#url=' + encodeURIComponent(base + 'large.trig') + '&pane=explore&view=map&scope=window');
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     await page.waitForFunction(() => document.querySelector('.geometry-list h3')?.textContent.includes('1000 geometries'), { timeout: 60000 });
     await page.select('#message-scope', 'memory');

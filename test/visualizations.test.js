@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const dataModel = require('@rdfjs/data-model').default;
-const { DatasetIndex, createRegistry, detectAvailable, extractTimeSeries, termKey } = require('../playground/visualizations');
+const { DatasetIndex, createRegistry, detectAvailable, expandHydraTemplate, extractTimeSeries, termKey } = require('../playground/visualizations');
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
@@ -95,4 +95,17 @@ test('blank nodes render as bounded nested descriptions and never as entity link
   assert.ok(html.includes('_:nested'));
   assert.ok(!html.includes('data-entity="BlankNode|'));
   assert.ok(!html.includes('data-select-entity="BlankNode|'));
+});
+
+test('Hydra URL templates expand filled search variables and omit empty ones', () => {
+  assert.equal(
+    expandHydraTemplate('https://example.test/fragments{?subject,predicate,object}', {
+      subject: '<https://example.org/Alice>', predicate: '', object: 'Alice Smith'
+    }),
+    'https://example.test/fragments?subject=%3Chttps%3A%2F%2Fexample.org%2FAlice%3E&object=Alice%20Smith'
+  );
+  assert.equal(
+    expandHydraTemplate('https://example.test/find?fixed=1{&term}', { term: 'two words' }),
+    'https://example.test/find?fixed=1&term=two%20words'
+  );
 });
