@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var statusEl = document.getElementById('status');
   var prefixesList = document.getElementById('prefixes-list');
   var prefixCount = document.getElementById('prefix-count');
+  var outputPrefixes = Object.assign({}, COMMON_PREFIXES);
   var codeJsEl = document.getElementById('code-js');
   var codeCliEl = document.getElementById('code-cli');
   var messagesPanel = document.getElementById('messages-panel');
@@ -336,37 +337,42 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  function appendToEditor(cm, chunk) {
-    var doc = cm.getDoc();
-    var lastLine = doc.lastLine();
-    var lastCh = doc.getLine(lastLine).length;
-    doc.replaceRange(chunk, CodeMirror.Pos(lastLine, lastCh));
-    cm.scrollIntoView({ line: doc.lastLine(), ch: 0 });
-  }
-
   // The writer emits its prefix header synchronously during construction. The
   // sink drops that header because the complete prefix map is displayed below.
   function editorSink(cm, isReady) {
+    var chunks = [];
     return {
       write: function (chunk, encoding, callback) {
-        if (isReady()) appendToEditor(cm, chunk);
+        if (isReady()) chunks.push(chunk);
         if (callback) callback();
       },
       end: function (callback) {
+        cm.setValue(chunks.join(''));
+        chunks = [];
         if (callback) callback(null, cm.getValue());
       }
     };
   }
 
   function renderPrefixes(prefixes) {
-    var names = Object.keys(prefixes).sort();
+    // Include the bindings used by the serializer, even when the source
+    // does not declare them (e.g. JSON-LD). Preserve conflicting source
+    // declarations under aliases rather than mislabelling compact output.
+    outputPrefixes = Object.assign(Object.create(null), COMMON_PREFIXES);
+    Object.keys(prefixes).forEach(function (name) {
+      var alias = name;
+      var suffix = 2;
+      while (Object.prototype.hasOwnProperty.call(outputPrefixes, alias) && outputPrefixes[alias] !== prefixes[name]) alias = name + suffix++;
+      outputPrefixes[alias] = prefixes[name];
+    });
+    var names = Object.keys(outputPrefixes).sort();
     prefixesList.innerHTML = '';
     names.forEach(function (name) {
       var li = document.createElement('li');
       var code = document.createElement('code');
       code.textContent = name;
       li.appendChild(code);
-      li.appendChild(document.createTextNode(': ' + prefixes[name]));
+      li.appendChild(document.createTextNode(': ' + outputPrefixes[name]));
       prefixesList.appendChild(li);
     });
     prefixCount.textContent = names.length ? '(' + names.length + ')' : '';
@@ -375,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Serialize the selected message scope in the chosen RDF syntax. JSON-LD
   // and optional framing are handled by renderMessageOutput below.
   function serializeMessage (quads) {
-    var writer = new rdfWriter.Writer({ format: outputFormat.value === 'nquads' ? 'N-Quads' : 'TriG', prefixes: COMMON_PREFIXES });
+    var writer = new rdfWriter.Writer({ format: outputFormat.value === 'nquads' ? 'N-Quads' : 'TriG', prefixes: outputPrefixes });
     writer.addQuads(quads);
     var output = '';
     writer.end(function (error, result) { output = result; });
@@ -404,7 +410,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('message-output-scope').textContent = label;
     outputPanel.hidden = true;
     messageOutputPanel.hidden = false;
-    visualizationWorkbench.setScope(quads, COMMON_PREFIXES, label, false, groups);
+    visualizationWorkbench.setScope(quads, outputPrefixes, label, false, groups);
     if (restoredMessagePosition === null) updateHash();
   }
 
@@ -490,8 +496,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // first WINDOW_SIZE fill the visible window directly (so, for formats
   // that genuinely stream messages, the panel populates progressively);
   // anything past that buffers in pendingMessages until "Load next" is
-  // clicked, so the browser never has to hold more than about two windows'
-  // worth of messages for the picture on screen.
+  // clicked. Only the chosen scope is rendered, not the entire hidden log.
   function receiveMessage (quadsInMessage) {
     if (currentMessages.length < WINDOW_SIZE) {
       currentMessages.push(quadsInMessage);
@@ -618,14 +623,11 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!response.ok) throw new Error('Request failed: HTTP ' + response.status);
       streamingReader = response.body.getReader();
       streamingDecoder = new TextDecoder('utf-8');
-      // The "prefixes used" panel shows only what the source itself
-      // declares, not COMMON_PREFIXES (that set is only for compacting the
-      // per-message TriG output in serializeMessage -- it's noise here).
-      var documentPrefixes = {};
+      var documentPrefixes = Object.create(null);
       streamingParser = new rdfParserTs.IncrementalParser({ baseIRI: url, format: 'text/turtle' }, {
         prefix: function (prefix, iri) {
           var value = (iri && iri.value !== undefined) ? iri.value : iri;
-          if (!(prefix in documentPrefixes)) {
+          if (documentPrefixes[prefix] !== value) {
             documentPrefixes[prefix] = value;
             renderPrefixes(documentPrefixes);
           }
@@ -835,14 +837,9 @@ document.addEventListener('DOMContentLoaded', function () {
       writerReady = true;
     }
 
-    // The "prefixes used" panel shows only what the source itself declares
-    // (via the live 'prefix' event, which only ever fires for prefixes the
-    // parser actually encountered) -- not response.prefixes, which also
-    // carries every COMMON_PREFIXES entry registered above purely to keep
-    // the output text compact.
-    var documentPrefixes = {};
+    var documentPrefixes = Object.create(null);
     fetcher.on('prefix', function (prefix, iri) {
-      if (!(prefix in documentPrefixes)) {
+      if (documentPrefixes[prefix] !== iri) {
         documentPrefixes[prefix] = iri;
         renderPrefixes(documentPrefixes);
       }
@@ -857,9 +854,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // addQuad({ quad, messageCounter }) form writes the VERSION/MESSAGE
     // delimiters itself, filling in empty messages from gaps in the
     // counter. Once we know a source is message-framed, per-quad whole-
-    // document visualization is skipped (the flat editor keeps growing via
-    // the writer instead; the visualization switches to per-message scope
-    // via renderMessage()'s setScope() calls) -- for a source with hundreds
+    // document visualization and serialization are skipped; only the
+    // selected message scope is rendered. For a source with hundreds
     // of thousands of quads, feeding them all to the whole-document view
     // too would be wasted work, enough on its own to hang the tab.
     var messageModeDetected = false;
@@ -870,7 +866,6 @@ document.addEventListener('DOMContentLoaded', function () {
           messageModeDetected = true;
           visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
         }
-        if (writer) writer.addQuad({ quad: quad, messageCounter: messageCounter });
         return;
       }
       visualizationWorkbench.addQuad(quad);
@@ -879,12 +874,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     fetcher.on('message', function (quadsInMessage) {
       receiveMessage(quadsInMessage);
-      // NDJSON-LD, one line per message (see messageToJsonLd) -- skipped
-      // when a custom frame is requested instead, which needs the whole
-      // graph as one document (applied once the fetch completes, below).
-      if (!useFrame && formatName === 'jsonld') {
-        appendToEditor(outputCm, JSON.stringify(fetcher.messageToJsonLd(quadsInMessage)) + '\n');
-      }
       var total = windowStartIndex + currentMessages.length + pendingMessages.length;
       setStatus('Fetching … ' + quadCount + ' triple' + (quadCount === 1 ? '' : 's') + ' in ' + total + ' message' + (total === 1 ? '' : 's') + ' so far');
     });
@@ -893,12 +882,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (writer) writer.end();
       renderPrefixes(documentPrefixes);
       finishMessages();
-      // A message-framed source keeps the flat output panel too, now
-      // showing the whole thing as a proper RDF Message Log (TriG/N-Quads)
-      // or NDJSON-LD (already written live above, one line/message) --
-      // alongside the slider below for browsing message by message. A
-      // custom frame still needs the whole graph as one document instead,
-      // ignoring message boundaries, same as the non-message case below.
+      // Message output (including custom framing) is handled by the scope
+      // renderer. Never build a second, hidden whole-log document.
       var hasMessages = currentMessages.length > 0;
       codeJsEl.textContent = jsSnippet(url, frame, hasMessages);
       codeCliEl.textContent = cliSnippet(url, frame, formatName);
@@ -907,7 +892,7 @@ document.addEventListener('DOMContentLoaded', function () {
         outputHint.textContent = formatName === 'jsonld' ? '(NDJSON-LD: one JSON object per message)' : '(RDF Message Log: MESSAGE-delimited)';
       }
 
-      if (hasMessages && !useFrame) {
+      if (hasMessages) {
         var messageTotal = windowStartIndex + currentMessages.length + pendingMessages.length;
         setStatus('Done: ' + response.triples.length + ' triples in ' + messageTotal + ' messages from ' + response.url);
         fetchBtn.disabled = false;
@@ -915,7 +900,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       if (!hasMessages) {
-        visualizationWorkbench.complete(response.triples, Object.assign({}, COMMON_PREFIXES, documentPrefixes), 'loaded document');
+        visualizationWorkbench.complete(response.triples, outputPrefixes, 'loaded document');
       }
 
       if (formatName !== 'jsonld') {

@@ -55,5 +55,5 @@ test('registry progressively detects profile, SHACL, temporal, and numeric views
   assert.ok(ids.includes('timeline'));
   assert.ok(ids.includes('statistics'));
   assert.ok(ids.includes('relationships'));
-  assert.ok(ids.includes('profile'));
+  assert.ok(ids.includes('overview'));
 });

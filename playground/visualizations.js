@@ -236,7 +236,7 @@ function detailsHtml(index, entity) {
 
 function overviewModule() {
   return {
-    id: 'overview', title: 'Overview', priority: 1000,
+    id: 'entities', title: 'Entities', priority: 1000,
     detect: function () { return { useful: true }; },
     render: function (index, state) {
       var types = {};
@@ -610,7 +610,7 @@ function datasetProfileModule() {
     }).join('');
   }
   return {
-    id: 'profile', title: 'Dataset profile', priority: 660,
+    id: 'overview', title: 'Overview', priority: 660,
     detect: function (index) { return { useful: index.quads.length > 0 }; },
     render: function (index) {
       var types = new Map();
@@ -722,12 +722,12 @@ function detectAvailable(index, registry) {
 
 function rankViews(available) {
   var ids = available.map(function (item) { return item.module.id; });
-  var secondary = ['overview', 'relationships', 'profile', 'forms', 'statistics'];
+  var secondary = ['overview', 'entities', 'relationships', 'profile', 'forms', 'statistics'];
   if (ids.includes('iiif')) secondary.push('images');
   if (ids.includes('credentials')) secondary.push('profiles');
   if (ids.includes('sensors')) secondary.push('timeline');
   var primary = available.filter(function (item) { return !secondary.includes(item.module.id); }).slice(0, 4);
-  return { primary: primary, more: available.filter(function (item) { return !primary.includes(item); }) };
+  return { primary: primary, more: available.filter(function (item) { return item.module.id !== 'overview' && !primary.includes(item); }) };
 }
 
 function createWorkbench(root, options) {
@@ -778,7 +778,9 @@ function createWorkbench(root, options) {
     if (!state.view || ids.indexOf(state.view) === -1) state.view = ranked.primary.length ? ranked.primary[0].module.id : 'overview';
     var active = available.find(function (item) { return item.module.id === state.view; }) || available[0];
     var primary = ranked.primary.slice();
-    if (!primary.includes(active)) primary.push(active);
+    if (active.module.id !== 'overview' && !primary.includes(active)) primary.push(active);
+    var overview = available.find(function (item) { return item.module.id === 'overview'; });
+    if (overview) primary.push(overview);
     var tabs = primary.map(function (item) {
       var selected = item.module.id === state.view;
       var count = item.result.count ? '<span>' + item.result.count + '</span>' : '';
@@ -948,7 +950,7 @@ function createWorkbench(root, options) {
 
   function restoreState(next) {
     if (!next) return;
-    state.view = next.view || '';
+    state.view = next.view === 'profile' ? 'overview' : next.view || '';
     state.camera = next.camera;
     state.filter = next.filter || '';
     state.entity = next.entity || '';

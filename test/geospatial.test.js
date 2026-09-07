@@ -35,4 +35,5 @@ test('ranking hides redundant and generic views from recommendations', () => {
   const ranked = rankViews(available);
   assert.deepEqual(ranked.primary.map(item => item.module.id), ['iiif', 'map']);
   assert.ok(ranked.more.some(item => item.module.id === 'images'));
+  assert.ok(!ranked.more.some(item => item.module.id === 'overview'));
 });

@@ -8,7 +8,25 @@ const puppeteer = require('puppeteer-core');
 
 (async () => {
   const root = path.resolve(__dirname, '../_site');
+  const { Writer, DataFactory } = require('rdfjs-jelly');
+  const { namedNode, literal, quad } = DataFactory;
+  const jelly = await new Promise((resolve, reject) => {
+    const writer = new Writer({ namespaces: { ex: 'https://example.org/' } });
+    for (let i = 0; i < 1002; i++) writer.addMessage(Array.from({ length: 10 }, (_, j) =>
+      quad(namedNode('https://example.org/s' + i), namedNode('https://example.org/p' + j), literal('Jelly value ' + i))));
+    writer.end((error, bytes) => error ? reject(error) : resolve(require('node:zlib').gzipSync(bytes)));
+  });
   const server = http.createServer((req, res) => {
+    if (req.url === '/prefixes.trig') {
+      res.setHeader('Content-Type', 'application/trig');
+      res.end('VERSION "1.2-messages"\nPREFIX schema: <http://schema.org/>\nPREFIX custom: <https://example.org/custom/>\ncustom:alice schema:name "Alice" .');
+      return;
+    }
+    if (req.url === '/data.jelly.gz') {
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.end(process.env.JELLY_FIXTURE ? fs.readFileSync(process.env.JELLY_FIXTURE) : jelly);
+      return;
+    }
     if (req.url === '/large.trig') {
       res.setHeader('Content-Type', 'application/trig');
       res.end('VERSION "1.2-messages"\nPREFIX geo: <http://www.opengis.net/ont/geosparql#>\n' + Array.from({ length: 1002 }, (_, i) => '<https://example.org/repeated> geo:asWKT "POINT (' + (i % 170) + ' 20)"^^geo:wktLiteral .').join('\nMESSAGE\n'));
@@ -37,6 +55,8 @@ const puppeteer = require('puppeteer-core');
     assert.ok(await page.$eval('#message-editor', el => el.textContent.includes('POINT')));
     assert.equal(await page.evaluate(() => !!window.maplibregl), false, 'Globe is lazy loaded');
     await page.click('#explore-tab');
+    assert.equal(await page.$eval('[data-view-tabs] > button:last-child', el => el.dataset.view), 'overview');
+    assert.equal(await page.$('[data-more-views] [data-view="overview"]'), null);
     await page.waitForFunction(() => document.querySelector('[data-globe]')?._globe?.getSource('features'), { timeout: 30000 });
     const first = await page.evaluate(async () => {
       const map = document.querySelector('[data-globe]')._globe;
@@ -70,7 +90,36 @@ const puppeteer = require('puppeteer-core');
     await page.click('#load-more-messages');
     await page.waitForFunction(() => document.querySelector('.geometry-list h3')?.textContent.startsWith('2 geometries'));
     assert.ok((await page.$eval('[data-scope-status]', el => el.textContent)).includes('1001–1002'));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'prefixes.trig') + '&pane=explore&view=profile');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    await page.waitForSelector('.dataset-profile-grid');
+    assert.equal(await page.$eval('[data-view-tabs] > button:last-child', el => el.dataset.view), 'overview');
+    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('schema: https://schema.org/')));
+    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('schema2: http://schema.org/')));
+    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('custom: https://example.org/custom/')));
+    assert.ok(await page.$eval('#message-editor .CodeMirror', el => el.CodeMirror.getValue().includes('schema2:name')));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'data.jelly.gz'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'), { timeout: 60000 });
+    assert.equal(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue()), '', 'No hidden whole-log editor for Jelly');
+    assert.ok(await page.$eval('#message-editor .CodeMirror', el => el.CodeMirror.getValue().length > 0));
+    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('http://www.w3.org/1999/02/22-rdf-syntax-ns#')));
+    if (!process.env.JELLY_FIXTURE) {
+      assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('https://example.org/')));
+      assert.ok(await page.$eval('#status', el => el.textContent.includes('10020 triples in 1002 messages')));
+    }
+    console.log('Jelly regression:', await page.$eval('#status', el => el.textContent));
+    await page.click('#load-more-messages');
+    assert.ok(await page.$eval('#message-position', el => el.textContent.startsWith('message 1001 ')));
+    await page.evaluate(() => { document.querySelector('#advanced').open = true; });
+    await page.select('#output-format', 'jsonld');
+    assert.ok(await page.$eval('#message-editor .CodeMirror', el => JSON.parse(el.CodeMirror.getValue())));
+    assert.ok(page.url().includes('format=jsonld'));
+    await page.evaluate(() => document.querySelector('#frame-editor .CodeMirror').CodeMirror.setValue('{"@graph":{}}'));
+    await page.click('#frame-toggle');
+    await page.waitForFunction(() => document.querySelector('#message-editor .CodeMirror').CodeMirror.getValue().startsWith('{'));
+    assert.ok(await page.$eval('#message-editor .CodeMirror', el => JSON.parse(el.CodeMirror.getValue())));
+    assert.equal(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue()), '', 'JSON-LD framing only renders the selected scope');
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed: default triples, ranking, lazy globe, geometries, message scope, share restoration, mobile layout.');
+    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
