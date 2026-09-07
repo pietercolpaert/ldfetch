@@ -617,10 +617,25 @@ document.addEventListener('DOMContentLoaded', function () {
     statusEl.classList.toggle('error', !!isError);
   }
 
+  // URLs that need the special streaming/backpressure path (see
+  // startStreamingExample), regardless of how they were reached -- clicking
+  // the example chip, restoring a shared #url=... link, or just pasting the
+  // URL in and hitting Fetch all have to end up here, not just the chip.
+  var STREAMING_URLS = Object.keys(EXAMPLES).reduce(function (urls, key) {
+    if (EXAMPLES[key].streaming) urls[EXAMPLES[key].url] = true;
+    return urls;
+  }, {});
+
   function runFetch() {
     var url = urlInput.value.trim();
     if (!url) {
       setStatus('Please enter a URL.', true);
+      return;
+    }
+
+    if (STREAMING_URLS[url]) {
+      updateHash();
+      startStreamingExample(url);
       return;
     }
 
@@ -756,13 +771,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     urlInput.value = example.url;
-    updateHash();
-
-    if (example.streaming) {
-      startStreamingExample(example.url);
-    } else {
-      runFetch();
-    }
+    // runFetch() itself checks STREAMING_URLS and routes accordingly, so
+    // this works the same whether the URL got here via this click, a
+    // restored #url=... link, or the user just pasting it in.
+    runFetch();
   });
 
   window.addEventListener('hashchange', function () {
