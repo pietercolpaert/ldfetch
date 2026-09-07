@@ -174,6 +174,21 @@ function mount(container, collection, select, camera, onCamera) {
     if (geometry.type === 'GeometryCollection') geometry.geometries.forEach(g => flatten(feature, g));
     else data.features.push({ ...feature, geometry });
   }
+  function extendBounds(bounds, geometry) {
+    if (geometry.type === 'GeometryCollection') return geometry.geometries.forEach(g => extendBounds(bounds, g));
+    function visit(coords) { if (typeof coords[0] === 'number') bounds.extend(coords.slice(0, 2)); else coords.forEach(visit); }
+    visit(geometry.coordinates);
+  }
+  function focusFeature(feature, duration) {
+    if (!map || !feature || !feature.geometry) return;
+    if (feature.geometry.type === 'Point') {
+      map.flyTo({ center: feature.geometry.coordinates.slice(0, 2), zoom: Math.max(map.getZoom(), 12), duration: duration });
+      return;
+    }
+    const bounds = new window.maplibregl.LngLatBounds();
+    extendBounds(bounds, feature.geometry);
+    if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: duration });
+  }
   collection.features.forEach(f => flatten(f, f.geometry));
   loadRenderer().then(lib => {
     if (disposed) return;
@@ -194,7 +209,10 @@ function mount(container, collection, select, camera, onCamera) {
       map.addLayer({ id: 'points', type: 'circle', source: 'features', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 7, 'circle-color': '#d74935', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
       map.on('click', event => {
         const hits = map.queryRenderedFeatures(event.point, { layers: ['points', 'lines', 'areas'] });
-        if (hits.length) select(hits[0].properties.entity);
+        if (hits.length) {
+          focusFeature(hits[0], 900);
+          select(hits[0].properties.entity);
+        }
       });
       status.textContent = collection.features.length + ' geometries · drag to rotate, scroll to zoom';
     });
@@ -204,8 +222,7 @@ function mount(container, collection, select, camera, onCamera) {
     home.onclick = () => map.jumpTo({ center: [10, 20], zoom: worldZoom(), bearing: 0, pitch: 0 });
     fit.onclick = () => {
       const bounds = new lib.LngLatBounds();
-      function visit(coords) { if (typeof coords[0] === 'number') bounds.extend(coords.slice(0, 2)); else coords.forEach(visit); }
-      data.features.forEach(f => visit(f.geometry.coordinates));
+      data.features.forEach(f => extendBounds(bounds, f.geometry));
       if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 0 });
     };
   }).catch(error => { if (!disposed) status.textContent = 'Globe unavailable: ' + error.message + ' The geometry list is still usable.'; });
@@ -221,6 +238,7 @@ function mount(container, collection, select, camera, onCamera) {
     }
     status.textContent = collection.features.length + ' geometries · drag to rotate, scroll to zoom';
   };
+  remove.focus = id => focusFeature(data.features.find(feature => String(feature.id) === String(id)), 900);
   return remove;
 }
 

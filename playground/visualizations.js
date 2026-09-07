@@ -431,7 +431,7 @@ function geographyModule() {
       state.mapData = data;
       return '<div class="globe-view"><div class="view-actions"><button class="action-button" data-globe-home>Whole Earth</button><button class="action-button secondary" data-globe-fit>Fit geometries</button></div><div class="globe" data-globe aria-label="Interactive spherical Earth"></div><p data-map-status role="status">Loading globe…</p></div>' +
         '<div class="geometry-list"><h3>' + data.features.length + ' geometries in this scope</h3>' + data.features.map(function (f) {
-          return '<p><button class="entity-link" data-entity="' + esc(f.properties.entity) + '">' + esc(f.properties.label) + '</button> · ' + esc(f.geometry.type) + (f.properties.message !== null ? ' · message ' + f.properties.message : '') + '</p>';
+          return '<p><button class="entity-link" data-entity="' + esc(f.properties.entity) + '" data-geometry-id="' + esc(f.id) + '">' + esc(f.properties.label) + '</button> · ' + esc(f.geometry.type) + (f.properties.message !== null ? ' · message ' + f.properties.message : '') + '</p>';
         }).join('') + '</div>' + (data.issues.length ? '<details class="geometry-issues"><summary>' + data.issues.length + ' geometries could not be plotted</summary>' + data.issues.map(function (issue) { return '<p><button class="entity-link" data-entity="' + esc(issue.entity) + '">Inspect source</button> ' + esc(issue.reason) + '</p>'; }).join('') + '</details>' : '');
     }
   };
@@ -881,6 +881,7 @@ function createWorkbench(root, options) {
     var entityTarget = event.target.closest('[data-entity], [data-select-entity]');
     if (entityTarget) {
       state.entity = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
+      if (entityTarget.dataset.geometryId !== undefined && unmount && unmount.focus) unmount.focus(entityTarget.dataset.geometryId);
       updateInspector(); notify();
     }
   });

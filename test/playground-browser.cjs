@@ -64,6 +64,13 @@ const puppeteer = require('puppeteer-core');
     });
     assert.equal(first.projection, 'globe');
     assert.equal(first.features, 3);
+    await page.click('[data-geometry-id="0"]');
+    await page.waitForFunction(() => {
+      const map = document.querySelector('[data-globe]')?._globe;
+      if (!map) return false;
+      const center = map.getCenter();
+      return Math.abs(center.lng - 4.35) < 0.02 && Math.abs(center.lat - 50.85) < 0.02 && map.getZoom() >= 11.5;
+    });
     await page.evaluate(() => { window.originalGlobe = document.querySelector('[data-globe]')._globe; });
     await page.screenshot({ path: '/tmp/ldfetch-globe.png', fullPage: true });
     await page.select('#message-scope', 'memory');
