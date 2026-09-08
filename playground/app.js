@@ -84,8 +84,11 @@ var WIKIDATA_SPARQL_CONSTRUCT_QUERY = [
   'LIMIT 20'
 ].join('\n');
 
-function riverBenchJellyUrl(dataset) {
-  return 'https://w3id.org/riverbench/datasets/' + dataset + '/dev/files/jelly_full.jelly.gz';
+function riverBenchJellyArchive(dataset) {
+  return {
+    url: 'https://w3id.org/riverbench/datasets/' + dataset + '/dev/files/jelly_full.jelly.gz',
+    proxy: true
+  };
 }
 
 var EXAMPLES = {
@@ -241,51 +244,21 @@ var EXAMPLES = {
     url: new URL('examples/riverbench-weather-sample.trig', document.baseURI).href,
     scope: 'memory'
   },
-  'riverbench-jelly-assist-iot-weather': {
-    url: riverBenchJellyUrl('assist-iot-weather')
-  },
-  'riverbench-jelly-assist-iot-weather-graphs': {
-    url: riverBenchJellyUrl('assist-iot-weather-graphs')
-  },
-  'riverbench-jelly-citypulse-traffic': {
-    url: riverBenchJellyUrl('citypulse-traffic')
-  },
-  'riverbench-jelly-citypulse-traffic-graphs': {
-    url: riverBenchJellyUrl('citypulse-traffic-graphs')
-  },
-  'riverbench-jelly-dbpedia-live': {
-    url: riverBenchJellyUrl('dbpedia-live')
-  },
-  'riverbench-jelly-digital-agenda-indicators': {
-    url: riverBenchJellyUrl('digital-agenda-indicators')
-  },
-  'riverbench-jelly-linked-spending': {
-    url: riverBenchJellyUrl('linked-spending')
-  },
-  'riverbench-jelly-lod-katrina': {
-    url: riverBenchJellyUrl('lod-katrina')
-  },
-  'riverbench-jelly-muziekweb': {
-    url: riverBenchJellyUrl('muziekweb')
-  },
-  'riverbench-jelly-nanopubs': {
-    url: riverBenchJellyUrl('nanopubs')
-  },
-  'riverbench-jelly-officegraph': {
-    url: riverBenchJellyUrl('officegraph')
-  },
-  'riverbench-jelly-openaire-lod': {
-    url: riverBenchJellyUrl('openaire-lod')
-  },
-  'riverbench-jelly-osm2rdf-denmark': {
-    url: riverBenchJellyUrl('osm2rdf-denmark')
-  },
-  'riverbench-jelly-politiquices': {
-    url: riverBenchJellyUrl('politiquices')
-  },
-  'riverbench-jelly-yago-annotated-facts': {
-    url: riverBenchJellyUrl('yago-annotated-facts')
-  },
+  'riverbench-jelly-assist-iot-weather': riverBenchJellyArchive('assist-iot-weather'),
+  'riverbench-jelly-assist-iot-weather-graphs': riverBenchJellyArchive('assist-iot-weather-graphs'),
+  'riverbench-jelly-citypulse-traffic': riverBenchJellyArchive('citypulse-traffic'),
+  'riverbench-jelly-citypulse-traffic-graphs': riverBenchJellyArchive('citypulse-traffic-graphs'),
+  'riverbench-jelly-dbpedia-live': riverBenchJellyArchive('dbpedia-live'),
+  'riverbench-jelly-digital-agenda-indicators': riverBenchJellyArchive('digital-agenda-indicators'),
+  'riverbench-jelly-linked-spending': riverBenchJellyArchive('linked-spending'),
+  'riverbench-jelly-lod-katrina': riverBenchJellyArchive('lod-katrina'),
+  'riverbench-jelly-muziekweb': riverBenchJellyArchive('muziekweb'),
+  'riverbench-jelly-nanopubs': riverBenchJellyArchive('nanopubs'),
+  'riverbench-jelly-officegraph': riverBenchJellyArchive('officegraph'),
+  'riverbench-jelly-openaire-lod': riverBenchJellyArchive('openaire-lod'),
+  'riverbench-jelly-osm2rdf-denmark': riverBenchJellyArchive('osm2rdf-denmark'),
+  'riverbench-jelly-politiquices': riverBenchJellyArchive('politiquices'),
+  'riverbench-jelly-yago-annotated-facts': riverBenchJellyArchive('yago-annotated-facts'),
   'estat-cube': {
     url: new URL('examples/japan-estat-data-cube.ttl', document.baseURI).href
   }
@@ -1273,6 +1246,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     urlInput.value = example.url;
     if (example.scope) messageScope.value = example.scope;
+    if (example.proxy) {
+      proxyToggle.checked = true;
+      if (!proxyInput.value.trim()) proxyInput.value = DEFAULT_PROXY;
+      proxyUrlField.hidden = false;
+      advanced.open = true;
+    }
     var viewState = visualizationWorkbench.getState();
     viewState.graph = '';
     viewState.entity = '';

@@ -324,6 +324,28 @@ const puppeteer = require('puppeteer-core');
     assert.equal(await page.$eval('#proxy-toggle', el => el.checked), true);
     assert.equal(await page.$eval('#proxy-url-field', el => el.hidden), false);
     assert.equal(await page.$eval('#proxy-url', el => el.value), base + 'proxy/');
+
+    const riverBenchExamplePage = await browser.newPage();
+    riverBenchExamplePage.on('pageerror', error => errors.push(error.message));
+    await riverBenchExamplePage.setRequestInterception(true);
+    riverBenchExamplePage.on('request', request => {
+      if (request.url().startsWith('https://proxy.linkeddatafragments.org/')) {
+        request.abort();
+        return;
+      }
+      request.continue();
+    });
+    await riverBenchExamplePage.goto(base + '#url=' + encodeURIComponent(base + 'examples/geospatial-messages.trig'));
+    await riverBenchExamplePage.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    await riverBenchExamplePage.click('#more-examples > summary');
+    await riverBenchExamplePage.click('[data-example="riverbench-jelly-assist-iot-weather"]');
+    await riverBenchExamplePage.waitForFunction(() => document.querySelector('#url').value.includes('/assist-iot-weather/dev/files/jelly_full.jelly.gz'));
+    assert.equal(await riverBenchExamplePage.$eval('#proxy-toggle', el => el.checked), true);
+    assert.equal(await riverBenchExamplePage.$eval('#proxy-url', el => el.value), 'https://proxy.linkeddatafragments.org/');
+    assert.equal(await riverBenchExamplePage.$eval('#proxy-url-field', el => el.hidden), false);
+    assert.ok(riverBenchExamplePage.url().includes('proxy='));
+    await riverBenchExamplePage.close();
+
     await page.evaluate(url => {
       document.querySelector('#url').value = url;
       document.querySelector('#url-form').requestSubmit();
