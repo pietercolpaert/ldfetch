@@ -93,6 +93,15 @@ var EXAMPLES = {
   profile: {
     url: 'https://pietercolpaert.be/'
   },
+  'pieter-heyvaert': {
+    url: 'https://pieterheyvaert.com/'
+  },
+  'rubens-works': {
+    url: 'https://www.rubensworks.net/'
+  },
+  'patrick-hochstenbach': {
+    url: 'https://patrickhochstenbach.net/profile/card#me'
+  },
   jelly: {
     url: 'https://raw.githubusercontent.com/pietercolpaert/rdfjs-jelly/main/example/osm-dk-10k.jelly.gz'
   },
@@ -116,9 +125,6 @@ var EXAMPLES = {
   // global auto-creation that only silently works in a non-strict context.
   shaclc: {
     url: 'https://raw.githubusercontent.com/jeswr/shaclcjs/main/__tests__/valid/basic-shape-with-targets.shaclc'
-  },
-  visualizations: {
-    url: new URL('examples/visualization-showcase.ttl', document.baseURI).href
   },
   geospatial: {
     url: new URL('examples/geospatial-messages.trig', document.baseURI).href

@@ -742,30 +742,97 @@ function statisticsModule() {
 // were the canvas's picture.
 var PAINTING_MOTIVATIONS = [IIIF + 'painting', OA + 'painting'];
 
+function imageForCanvas(index, canvas) {
+  var pages = index.listValues(canvas, AS + 'items');
+  var fallback = null;
+  for (var i = 0; i < pages.length; i++) {
+    var page = index.entity(pages[i]);
+    var annotations = page ? index.listValues(page, AS + 'items') : [];
+    for (var j = 0; j < annotations.length; j++) {
+      var annotation = index.entity(annotations[j]);
+      if (!annotation) continue;
+      var isPainting = index.values(annotation, OA + 'motivatedBy').some(function (m) { return PAINTING_MOTIVATIONS.indexOf(m.value) !== -1; });
+      var bodies = index.values(annotation, OA + 'hasBody');
+      for (var k = 0; k < bodies.length; k++) {
+        var url = mediaUrl(index, bodies[k]);
+        if (!url) continue;
+        if (isPainting) return { url: url, annotation: annotation };
+        if (!fallback) fallback = { url: url, annotation: annotation };
+      }
+    }
+  }
+  return fallback;
+}
+
+function annotationTarget(index, annotation) {
+  var target = index.values(annotation, OA + 'hasTarget')[0];
+  if (!target) return null;
+  var targetEntity = index.entity(target);
+  var source = targetEntity && index.values(targetEntity, OA + 'hasSource')[0];
+  var selector = targetEntity && index.values(targetEntity, OA + 'hasSelector')[0];
+  var selectorEntity = selector && index.entity(selector);
+  var selectorValue = selectorEntity && index.values(selectorEntity, RDF + 'value')[0];
+  return { source: source || target, selector: selectorValue ? selectorValue.value : target.value };
+}
+
+function annotationRegion(value) {
+  var match = /(?:^|#)xywh=(percent:)?([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)/i.exec(value || '');
+  if (!match) return null;
+  return { percent: !!match[1], x: Number(match[2]), y: Number(match[3]), width: Number(match[4]), height: Number(match[5]) };
+}
+
+function canvasAnnotations(index, canvas) {
+  return index.entitiesOfType(OA + 'Annotation').filter(function (annotation) {
+    if (index.values(annotation, OA + 'motivatedBy').some(function (term) { return PAINTING_MOTIVATIONS.indexOf(term.value) !== -1; })) return false;
+    var target = annotationTarget(index, annotation);
+    return target && (target.source.value === canvas.term.value || target.source.value.indexOf(canvas.term.value + '#') === 0);
+  }).map(function (annotation) {
+    var bodies = index.values(annotation, OA + 'hasBody');
+    var bodyText = '';
+    for (var i = 0; i < bodies.length && !bodyText; i++) {
+      var body = index.entity(bodies[i]);
+      var value = body && index.values(body, RDF + 'value')[0];
+      if (value) bodyText = value.value;
+      else if (bodies[i].termType === 'Literal') bodyText = bodies[i].value;
+    }
+    var target = annotationTarget(index, annotation);
+    return { entity: annotation, label: index.label(annotation) || bodyText || 'Annotation', body: bodyText, region: annotationRegion(target && target.selector) };
+  });
+}
+
+function iiifCanvasDialog(index, canvas) {
+  var image = imageForCanvas(index, canvas);
+  if (!image) return null;
+  var annotations = canvasAnnotations(index, canvas);
+  var widthTerm = index.values(canvas, ['http://www.w3.org/2003/12/exif/ns#width', IIIF + 'width'])[0];
+  var heightTerm = index.values(canvas, ['http://www.w3.org/2003/12/exif/ns#height', IIIF + 'height'])[0];
+  var canvasWidth = widthTerm ? Number(widthTerm.value) : 0;
+  var canvasHeight = heightTerm ? Number(heightTerm.value) : 0;
+  function regionStyle(region) {
+    if (!region) return '';
+    var x = region.x; var y = region.y; var width = region.width; var height = region.height;
+    if (!region.percent) {
+      if (!canvasWidth || !canvasHeight) return '';
+      x = x / canvasWidth * 100; width = width / canvasWidth * 100;
+      y = y / canvasHeight * 100; height = height / canvasHeight * 100;
+    }
+    return 'left:' + x + '%;top:' + y + '%;width:' + width + '%;height:' + height + '%';
+  }
+  var dialog = document.createElement('dialog');
+  dialog.className = 'iiif-dialog';
+  dialog.innerHTML = '<div class="iiif-dialog-heading"><div><span>IIIF canvas</span><h3>' + esc(index.label(canvas)) + '</h3></div><button type="button" data-iiif-close aria-label="Close detailed image view">×</button></div>' +
+    '<div class="iiif-detail-layout"><div class="iiif-detail-stage"><div class="iiif-detail-stage-inner"><img src="' + esc(image.url) + '" alt="' + esc(index.label(canvas)) + '">' + annotations.map(function (annotation, position) {
+      var style = regionStyle(annotation.region);
+      return style ? '<button type="button" class="iiif-region" style="' + style + '" data-iiif-annotation="' + position + '" aria-label="' + esc(annotation.label) + '"><span>' + (position + 1) + '</span></button>' : '';
+    }).join('') + '</div></div><aside class="iiif-detail-annotations"><h4>Annotations <span>' + annotations.length + '</span></h4>' + (annotations.length ? '<ol>' + annotations.map(function (annotation, position) {
+      return '<li><button type="button" data-iiif-annotation="' + position + '"><b>' + esc(annotation.label) + '</b>' + (annotation.body && annotation.body !== annotation.label ? '<span>' + esc(annotation.body) + '</span>' : '') + (annotation.region ? '<small>Region ' + esc(annotation.region.x + ', ' + annotation.region.y + ', ' + annotation.region.width + ', ' + annotation.region.height + (annotation.region.percent ? '%' : ' px')) + '</small>' : '<small>Whole canvas</small>') + '</button></li>';
+    }).join('') + '</ol>' : '<p>No non-painting annotations are loaded for this canvas.</p>') + '</aside></div>';
+  return dialog;
+}
+
 function iiifModule() {
   var types = [IIIF + 'Manifest', IIIF + 'Canvas', IIIF + 'Range', IIIF + 'AnnotationPage', OA + 'Annotation'];
   function resources(index) { return index.entitiesOfType(types); }
-  function imageForCanvas(index, canvas) {
-    var pages = index.listValues(canvas, AS + 'items');
-    var fallback = null;
-    for (var i = 0; i < pages.length; i++) {
-      var page = index.entity(pages[i]);
-      var annotations = page ? index.listValues(page, AS + 'items') : [];
-      for (var j = 0; j < annotations.length; j++) {
-        var annotation = index.entity(annotations[j]);
-        if (!annotation) continue;
-        var isPainting = index.values(annotation, OA + 'motivatedBy').some(function (m) { return PAINTING_MOTIVATIONS.indexOf(m.value) !== -1; });
-        var bodies = index.values(annotation, OA + 'hasBody');
-        for (var k = 0; k < bodies.length; k++) {
-          var url = mediaUrl(index, bodies[k]);
-          if (!url) continue;
-          if (isPainting) return { url: url, annotation: annotation };
-          if (!fallback) fallback = { url: url, annotation: annotation };
-        }
-      }
-    }
-    return fallback;
-  }
 
   // A Range (https://iiif.io/api/presentation/3.0/#54-range) groups canvases
   // into a meaningful table of contents -- for a hinged polyptych like this
@@ -813,7 +880,8 @@ function iiifModule() {
         structuresHtml(index) +
         '<div class="canvas-strip">' + canvases.map(function (canvas, position) {
           var image = imageForCanvas(index, canvas);
-          return '<figure' + selectAttr(canvas.term) + '><div class="canvas-image">' + (image ? '<img src="' + esc(image.url) + '" alt="' + esc(index.label(canvas)) + '" loading="lazy" referrerpolicy="no-referrer">' : '<div class="image-unavailable">No supported painting image found</div>') + '</div><figcaption><b>' + (position + 1) + '</b> ' + esc(index.label(canvas)) + (image && image.annotation ? '<span>1 loaded annotation</span>' : '') + '</figcaption></figure>';
+          var annotationCount = canvasAnnotations(index, canvas).length;
+          return '<figure' + selectAttr(canvas.term) + '><div class="canvas-image">' + (image ? '<button type="button" data-iiif-canvas="' + esc(termKey(canvas.term)) + '" aria-label="Open detailed view of ' + esc(index.label(canvas)) + '"><img src="' + esc(image.url) + '" alt="" loading="lazy" referrerpolicy="no-referrer"></button>' : '<div class="image-unavailable">No supported painting image found</div>') + '</div><figcaption><b>' + (position + 1) + '</b> ' + esc(index.label(canvas)) + (annotationCount ? '<span>' + annotationCount + ' annotation' + (annotationCount === 1 ? '' : 's') + '</span>' : '') + '</figcaption></figure>';
         }).join('') + '</div>' + (annotations.length ? '<div class="annotation-list"><h3>Loaded annotations</h3>' + annotations.map(function (annotation) {
           var targets = index.values(annotation, OA + 'hasTarget');
           var bodies = index.values(annotation, OA + 'hasBody');
@@ -1517,6 +1585,28 @@ function createWorkbench(root, options) {
   }
 
   root.addEventListener('click', function (event) {
+    var closeIiif = event.target.closest('[data-iiif-close]');
+    if (closeIiif) { closeIiif.closest('dialog').close(); return; }
+    var iiifAnnotationTarget = event.target.closest('[data-iiif-annotation]');
+    if (iiifAnnotationTarget) {
+      var annotationDialog = iiifAnnotationTarget.closest('.iiif-dialog');
+      annotationDialog.querySelectorAll('[data-iiif-annotation]').forEach(function (item) { item.classList.toggle('active', item.dataset.iiifAnnotation === iiifAnnotationTarget.dataset.iiifAnnotation); });
+      var listTarget = annotationDialog.querySelector('.iiif-detail-annotations [data-iiif-annotation="' + iiifAnnotationTarget.dataset.iiifAnnotation + '"]');
+      if (listTarget && listTarget !== iiifAnnotationTarget) listTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    var canvasTarget = event.target.closest('[data-iiif-canvas]');
+    if (canvasTarget) {
+      var canvas = index.entity(canvasTarget.dataset.iiifCanvas);
+      var canvasDialog = canvas && iiifCanvasDialog(index, canvas);
+      if (canvasDialog) {
+        canvasDialog.addEventListener('close', function () { canvasDialog.remove(); });
+        canvasDialog.addEventListener('click', function (dialogEvent) { if (dialogEvent.target === canvasDialog) canvasDialog.close(); });
+        root.appendChild(canvasDialog);
+        canvasDialog.showModal();
+      }
+      return;
+    }
     var blankToggle = event.target.closest('[data-blank-toggle]');
     if (blankToggle) {
       var properties = blankToggle.parentElement.querySelector('.blank-node-properties');

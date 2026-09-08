@@ -16,6 +16,7 @@
 @prefix vc: <https://www.w3.org/2018/credentials#> .
 @prefix oa: <http://www.w3.org/ns/oa#> .
 @prefix iiif: <http://iiif.io/api/presentation/3#> .
+@prefix as: <http://www.w3.org/ns/activitystreams#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix hydra: <http://www.w3.org/ns/hydra/core#> .
 @prefix rr: <http://www.w3.org/ns/r2rml#> .
@@ -81,10 +82,13 @@ ex:credential a vc:VerifiableCredential ;
   vc:credentialSubject ex:alice ; vc:validFrom "2026-01-01T00:00:00Z"^^xsd:dateTime .
 ex:university a prov:Agent ; rdfs:label "Example University" .
 
-ex:manifest a iiif:Manifest ; dcterms:title "Example image presentation" ; iiif:items ex:canvas .
-ex:canvas a iiif:Canvas ; dcterms:title "Portrait canvas" ; iiif:items ex:annotationPage .
-ex:annotationPage a iiif:AnnotationPage ; iiif:items ex:annotation .
-ex:annotation a oa:Annotation ; oa:hasTarget ex:canvas ; oa:hasBody <avatar-alice.svg> .
+ex:manifest a iiif:Manifest ; dcterms:title "Example image presentation" ; as:items (ex:canvas) .
+ex:canvas a iiif:Canvas ; dcterms:title "Portrait canvas" ; as:items (ex:annotationPage) .
+ex:annotationPage a iiif:AnnotationPage ; as:items (ex:annotation ex:portraitTag) .
+ex:annotation a oa:Annotation ; oa:motivatedBy oa:painting ; oa:hasTarget ex:canvas ; oa:hasBody <avatar-alice.svg> .
+ex:portraitTag a oa:Annotation ; dcterms:title "Portrait" ; oa:motivatedBy oa:tagging ;
+  oa:hasTarget <https://example.org/ldfetch-showcase/canvas#xywh=percent:20,15,60,70> ;
+  oa:hasBody [ a oa:TextualBody ; rdf:value "Alice’s portrait" ] .
 
 ex:Researcher a owl:Class ; rdfs:label "Researcher" ; rdfs:subClassOf foaf:Person .
 ex:measuredValue a owl:DatatypeProperty ; rdfs:label "measured value" ; rdfs:domain sosa:Observation ; rdfs:range xsd:decimal .

@@ -778,11 +778,32 @@ button {
 }
 .canvas-strip figure { margin: 0; border: 1px solid #dfe6ee; border-radius: 8px; overflow: hidden; background: white; scroll-snap-align: start; }
 .canvas-image { display: grid; place-items: center; min-height: 13rem; background: repeating-conic-gradient(#f1f3f5 0 25%, white 0 50%) 50% / 18px 18px; }
+.canvas-image > button { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
 .canvas-image img { display: block; width: 100%; height: 18rem; object-fit: contain; }
 .image-unavailable { padding: 2rem; color: #647180; font-size: 0.8rem; text-align: center; }
 .canvas-strip figcaption { display: flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.7rem; font-size: 0.8rem; }
 .canvas-strip figcaption b { display: grid; place-items: center; min-width: 1.55rem; height: 1.55rem; border-radius: 50%; background: var(--primary); color: white; }
 .canvas-strip figcaption span { margin-left: auto; color: #647180; font-size: 0.68rem; }
+.iiif-dialog { width: min(96vw, 90rem); max-width: none; height: min(92vh, 60rem); padding: 0; border: 0; border-radius: 12px; color: var(--text); box-shadow: 0 1.5rem 5rem #0008; }
+.iiif-dialog::backdrop { background: #17212bcc; backdrop-filter: blur(2px); }
+.iiif-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.8rem 1rem; border-bottom: 1px solid #dfe6ee; }
+.iiif-dialog-heading span { color: #647180; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.iiif-dialog-heading h3 { margin: 0.1rem 0 0; }
+.iiif-dialog-heading button { width: 2.2rem; height: 2.2rem; border: 0; border-radius: 50%; background: #edf2f7; color: var(--text); font-size: 1.5rem; cursor: pointer; }
+.iiif-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 24rem); height: calc(100% - 4.2rem); }
+.iiif-detail-stage { display: grid; place-items: center; min-width: 0; overflow: auto; padding: 1rem; background: #202832; }
+.iiif-detail-stage-inner { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.iiif-detail-stage img { display: block; max-width: 100%; max-height: calc(92vh - 6.5rem); object-fit: contain; }
+.iiif-region { position: absolute; padding: 0; border: 2px solid #ffcf33; background: #ffcf3326; color: #17212b; cursor: pointer; box-shadow: 0 0 0 1px #0005; }
+.iiif-region span { display: grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 0 0 50% 0; background: #ffcf33; font: 700 0.72rem/1 sans-serif; }
+.iiif-region:hover, .iiif-region.active { z-index: 2; border-color: #ff7a00; background: #ff7a0044; }
+.iiif-detail-annotations { overflow-y: auto; padding: 1rem; border-left: 1px solid #dfe6ee; }
+.iiif-detail-annotations h4 { display: flex; justify-content: space-between; margin: 0 0 0.7rem; }
+.iiif-detail-annotations ol { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+.iiif-detail-annotations button { width: 100%; padding: 0.65rem; border: 1px solid #dfe6ee; border-radius: 7px; background: white; color: var(--text); text-align: left; cursor: pointer; }
+.iiif-detail-annotations button:hover, .iiif-detail-annotations button.active { border-color: var(--primary); background: #edf5ff; }
+.iiif-detail-annotations button span, .iiif-detail-annotations button small { display: block; margin-top: 0.25rem; }
+.iiif-detail-annotations button small { color: #647180; }
 .annotation-list { margin-top: 0.8rem; }
 .annotation-list > h3 { color: var(--primary); }
 .annotation-list article { margin: 0.45rem 0; padding: 0.65rem 0.8rem; border-left: 3px solid #9db4c8; background: #f7f9fb; }
@@ -976,6 +997,11 @@ button {
   .shape-flow { grid-template-columns: 1fr; }
   .shape-branches > div { grid-template-columns: 1fr; }
   .canvas-strip { grid-auto-columns: 88%; }
+  .iiif-dialog { width: 100vw; height: 100vh; max-height: none; border-radius: 0; }
+  .iiif-detail-layout { display: block; height: calc(100% - 4.2rem); overflow-y: auto; }
+  .iiif-detail-stage { min-height: 45vh; overflow: visible; }
+  .iiif-detail-stage img { max-height: 65vh; }
+  .iiif-detail-annotations { overflow: visible; border-top: 1px solid #dfe6ee; border-left: 0; }
   .relationship-columns { grid-template-columns: 1fr; }
 }
 
