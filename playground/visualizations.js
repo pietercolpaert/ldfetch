@@ -151,6 +151,13 @@ DatasetIndex.prototype.label = function (entityOrTerm) {
   var term = entity ? entity.term : entityOrTerm;
   if (!term) return '';
   if (term.termType === 'Literal') return term.value;
+  // A blank node with no naming property at all falls back to its rdf:type
+  // (e.g. "js:UnzipFile" for an RDF-Connect processor) rather than its
+  // opaque, meaningless internal parser-assigned ID.
+  if (term.termType === 'BlankNode' && entity) {
+    var types = this.values(entity, RDF + 'type');
+    if (types.length) return types.map(function (type) { return self.compact(type.value); }).join(', ');
+  }
   return self.compact(term.value || '');
 };
 
@@ -181,8 +188,15 @@ function blankNodeId(term) {
   return '_:' + String(term && term.value || 'blank');
 }
 
+// Blank nodes are just as much entities as named nodes (many vocabularies --
+// SHACL shapes, RDF-Connect processors -- use them as their main structural
+// nodes), so they're selectable here too; the entity inspector and its
+// details table already render either kind fine. Only the "Follow named
+// node" action is NamedNode-only, since a blank node has no URI to follow.
 function selectAttr(term, name) {
-  return term && term.termType === 'NamedNode' ? ' ' + (name || 'data-select-entity') + '="' + esc(termKey(term)) + '" title="' + esc(term.value) + '"' : '';
+  if (!term) return '';
+  var title = term.termType === 'BlankNode' ? blankNodeId(term) : term.value;
+  return ' ' + (name || 'data-select-entity') + '="' + esc(termKey(term)) + '" title="' + esc(title) + '"';
 }
 
 function blankNodeHtml(index, term, depth, seen) {
@@ -895,6 +909,314 @@ function hypermediaModule() {
   };
 }
 
+// RDF-Connect (https://rdf-connect.github.io/specification/) describes data
+// pipelines as processors wired together by channels. A channel is one
+// entity with both a conn:reader and a conn:writer value (the newer
+// rdf-connect# ontology and the older conn#/conn/js# "js-runner" ontology
+// both follow this shape): whatever a processor writes to the writer side
+// of a channel arrives on the reader side. Concrete channel *endpoint*
+// types (js:JsReaderChannel, :HttpWriterChannel, rdfc:Reader, ...) are
+// recognized by name -- ending in "ReaderChannel"/"WriterChannel", or being
+// exactly rdfc:Reader/rdfc:Writer -- rather than by relying on the
+// rdfs:subClassOf hierarchy from the processor packages' own ontology
+// files, which are only ever referenced via owl:imports, never actually
+// fetched and merged into the loaded graph.
+var RDFC = 'https://w3id.org/rdf-connect#';
+var CONN = 'https://w3id.org/conn#';
+
+function channelDirection(index, term) {
+  if (!term) return null;
+  var entity = index.entity(term);
+  if (!entity) return null;
+  var types = index.values(entity, RDF + 'type').map(function (t) { return t.value; });
+  if (types.indexOf(RDFC + 'Reader') !== -1 || types.some(function (t) { return /ReaderChannel$/i.test(t); })) return 'in';
+  if (types.indexOf(RDFC + 'Writer') !== -1 || types.some(function (t) { return /WriterChannel$/i.test(t); })) return 'out';
+  return null;
+}
+
+function pipelineChannelLinks(index) {
+  var links = [];
+  index.entities.forEach(function (entity) {
+    var readers = index.values(entity, CONN + 'reader');
+    var writers = index.values(entity, CONN + 'writer');
+    if (!readers.length || !writers.length) return;
+    readers.forEach(function (reader) {
+      writers.forEach(function (writer) { links.push({ reader: reader, writer: writer }); });
+    });
+  });
+  return links;
+}
+
+// A processor's channel references are often nested a level or two deep
+// inside structural configuration blank nodes (e.g. js:rmlSource [
+// js:input <x> ]), not just directly on the processor itself -- walk blank-
+// node property values to find them, stopping at channel resources
+// themselves and bounding revisits for safety against cycles.
+function collectChannelRefs(index, entity, refs, seen, depth) {
+  if (!entity || depth > 5 || seen[termKey(entity.term)]) return;
+  seen[termKey(entity.term)] = true;
+  entity.properties.forEach(function (terms, predicate) {
+    terms.forEach(function (term) {
+      var direction = channelDirection(index, term);
+      if (direction) {
+        refs.push({ predicate: predicate, term: term, direction: direction });
+      } else if (term.termType === 'BlankNode') {
+        var nested = index.entity(term);
+        if (nested) collectChannelRefs(index, nested, refs, seen, depth + 1);
+      }
+    });
+  });
+}
+
+// A processor is any entity (usually a blank node) that isn't itself a
+// channel endpoint or a reader/writer link, but references at least one
+// channel somewhere in its own (possibly nested) properties. A blank node
+// that's itself the value of some other entity's property (e.g. the
+// js:rmlSource [ js:input <x> ] blocks nested under a js:RMLMapperReader)
+// is nested configuration owned by that other entity, not an independent
+// pipeline stage -- collectChannelRefs already attributes its channels to
+// the owning processor, so counting it again here would double them up.
+function pipelineProcessors(index) {
+  var linkKeys = {};
+  index.entities.forEach(function (entity) {
+    if (index.values(entity, CONN + 'reader').length && index.values(entity, CONN + 'writer').length) linkKeys[termKey(entity.term)] = true;
+  });
+  var found = [];
+  index.entities.forEach(function (entity) {
+    if (channelDirection(index, entity.term) || linkKeys[termKey(entity.term)]) return;
+    if (entity.term.termType === 'BlankNode' && (index.incoming.get(termKey(entity.term)) || []).length) return;
+    var refs = [];
+    collectChannelRefs(index, entity, refs, {}, 0);
+    if (refs.length) found.push({ entity: entity, refs: refs });
+  });
+  return found;
+}
+
+// Channel names are usually relative URLs resolved against the pipeline
+// document's own location (<rml/reader>, <yarrrml/versioned/writer>, ...),
+// so they all share one long, uninformative absolute-URL prefix -- index.
+// compact() alone would cut each down to just its very last path segment
+// ("reader"/"writer"), losing exactly the part that distinguishes one
+// channel from another. Instead, find the longest prefix shared by every
+// channel term actually seen in this graph and strip that (plus the
+// trailing "/reader" or "/writer"), which works regardless of whether the
+// source uses relative or absolute channel URLs.
+function makeChannelLabeler(index, terms) {
+  var values = uniqueTerms(terms).map(function (t) { return t.value; });
+  var cutIndex = 0;
+  if (values.length > 1) {
+    var prefixLength = values[0].length;
+    for (var i = 1; i < values.length && prefixLength > 0; i++) {
+      var other = values[i];
+      var max = Math.min(prefixLength, other.length);
+      var j = 0;
+      while (j < max && values[0][j] === other[j]) j++;
+      prefixLength = j;
+    }
+    var cut = Math.max(values[0].lastIndexOf('/', prefixLength - 1), values[0].lastIndexOf('#', prefixLength - 1));
+    cutIndex = cut === -1 ? 0 : cut + 1;
+  }
+  return function (term) {
+    var label = term.value.slice(cutIndex).replace(/\/(reader|writer)$/i, '');
+    return label || index.compact(term.value);
+  };
+}
+
+// Builds the processor graph: one edge per (producer, channel, consumer)
+// triple resolved through a conn:reader/conn:writer link, plus one edge per
+// channel referenced directly by a processor but never resolved that way
+// (e.g. a bare FileReaderChannel reading a static file) -- these represent
+// the pipeline's own external boundaries, grouped by channel so several
+// processors sharing one external channel share one edge target too. Every
+// edge carries the raw channel term rather than a precomputed label, since
+// the readable label depends on every channel term in the graph (see
+// makeChannelLabeler) and so can only be computed once the whole graph is known.
+function pipelineGraph(index) {
+  var processors = pipelineProcessors(index);
+  var edges = [];
+  var resolvedChannelKeys = {};
+
+  function byChannel(direction, channelTerm) {
+    var channelKey = termKey(channelTerm);
+    return processors.filter(function (p) {
+      return p.refs.some(function (ref) { return ref.direction === direction && termKey(ref.term) === channelKey; });
+    });
+  }
+
+  pipelineChannelLinks(index).forEach(function (link) {
+    resolvedChannelKeys[termKey(link.reader)] = true;
+    resolvedChannelKeys[termKey(link.writer)] = true;
+    var consumers = byChannel('in', link.reader);
+    var producers = byChannel('out', link.writer);
+    if (!consumers.length && !producers.length) return;
+    if (producers.length && consumers.length) {
+      producers.forEach(function (producer) {
+        consumers.forEach(function (consumer) { edges.push({ from: producer, to: consumer, channel: link.reader }); });
+      });
+    } else if (producers.length) {
+      producers.forEach(function (producer) { edges.push({ from: producer, to: null, channel: link.reader }); });
+    } else {
+      consumers.forEach(function (consumer) { edges.push({ from: null, to: consumer, channel: link.writer }); });
+    }
+  });
+
+  var externalByChannel = {};
+  processors.forEach(function (p) {
+    p.refs.forEach(function (ref) {
+      var key = termKey(ref.term);
+      if (resolvedChannelKeys[key]) return;
+      (externalByChannel[key] || (externalByChannel[key] = { term: ref.term, direction: ref.direction, processors: [] })).processors.push(p);
+    });
+  });
+  Object.keys(externalByChannel).forEach(function (key) {
+    var external = externalByChannel[key];
+    external.processors.forEach(function (p) {
+      if (external.direction === 'in') edges.push({ from: null, to: p, channel: external.term });
+      else edges.push({ from: p, to: null, channel: external.term });
+    });
+  });
+
+  return { processors: processors, edges: edges };
+}
+
+function processorTypeLabel(index, entity) {
+  var types = index.values(entity, RDF + 'type').map(function (t) { return index.compact(t.value); });
+  return types.join(', ') || 'Processor';
+}
+
+// Renders the flow as an SVG: one box per processor plus one per distinct
+// external channel, laid out left to right by topological depth (computed
+// from the resolved producer→consumer edges only) and stacked top to
+// bottom within each column -- the same "compute coordinates directly,
+// no DOM measurement pass" approach timeSeriesModule uses.
+function pipelineDiagramSvg(index, processors, edges, label) {
+  var NODE_W = 172, NODE_H = 52, COL_GAP = 70, ROW_GAP = 18, MARGIN = 22;
+  var resolvedEdges = edges.filter(function (e) { return e.from && e.to; });
+  var depths = new Map();
+  function resolveDepth(p, seen) {
+    if (depths.has(p)) return depths.get(p);
+    if (seen.has(p)) return 0;
+    seen.add(p);
+    var preds = resolvedEdges.filter(function (e) { return e.to === p; }).map(function (e) { return e.from; });
+    var d = preds.length ? 1 + Math.max.apply(null, preds.map(function (pred) { return resolveDepth(pred, seen); })) : 0;
+    depths.set(p, d);
+    return d;
+  }
+  processors.forEach(function (p) { resolveDepth(p, new Set()); });
+
+  var nodes = [];
+  var nodeByProcessor = new Map();
+  processors.forEach(function (p) {
+    var typeLabel = processorTypeLabel(index, p.entity);
+    var rawLabel = index.label(p.entity);
+    // index.label() falls back to the entity's own rdf:type when it has no
+    // real naming property (see DatasetIndex.prototype.label) -- the same
+    // fallback processorTypeLabel() already computes directly, so only
+    // treat it as a distinct, second line of text when it isn't just that.
+    var node = {
+      kind: 'processor', depth: depths.get(p) || 0, term: p.entity.term,
+      typeLabel: typeLabel,
+      label: rawLabel && rawLabel !== p.entity.term.value && rawLabel !== typeLabel ? rawLabel : ''
+    };
+    nodes.push(node);
+    nodeByProcessor.set(p, node);
+  });
+  var externalNodes = new Map();
+  edges.forEach(function (edge) {
+    if (edge.from && edge.to) return;
+    var channelKey = termKey(edge.channel);
+    if (externalNodes.has(channelKey)) return;
+    var anchor = edge.from ? nodeByProcessor.get(edge.from) : nodeByProcessor.get(edge.to);
+    var node = { kind: 'external', depth: edge.from ? anchor.depth + 1 : Math.max(0, anchor.depth - 1), term: edge.channel, label: label(edge.channel) };
+    externalNodes.set(channelKey, node);
+    nodes.push(node);
+  });
+
+  var minDepth = Math.min.apply(null, nodes.map(function (n) { return n.depth; }).concat([0]));
+  var columns = {};
+  nodes.forEach(function (n) {
+    n.column = n.depth - minDepth;
+    (columns[n.column] || (columns[n.column] = [])).push(n);
+  });
+  Object.keys(columns).forEach(function (col) { columns[col].forEach(function (n, row) { n.row = row; }); });
+  var columnCount = Math.max.apply(null, nodes.map(function (n) { return n.column; }).concat([0])) + 1;
+  var maxRows = Math.max.apply(null, Object.keys(columns).map(function (col) { return columns[col].length; }).concat([1]));
+  nodes.forEach(function (n) {
+    n.x = MARGIN + n.column * (NODE_W + COL_GAP);
+    n.y = MARGIN + n.row * (NODE_H + ROW_GAP);
+  });
+  var width = MARGIN * 2 + columnCount * NODE_W + Math.max(0, columnCount - 1) * COL_GAP;
+  var height = MARGIN * 2 + maxRows * NODE_H + Math.max(0, maxRows - 1) * ROW_GAP;
+
+  function anchorFor(edge, end) {
+    if (end === 'from') return edge.from ? nodeByProcessor.get(edge.from) : externalNodes.get(termKey(edge.channel));
+    return edge.to ? nodeByProcessor.get(edge.to) : externalNodes.get(termKey(edge.channel));
+  }
+
+  var edgeSvg = edges.map(function (edge) {
+    var fromNode = anchorFor(edge, 'from'), toNode = anchorFor(edge, 'to');
+    if (!fromNode || !toNode) return '';
+    var start = { x: fromNode.x + NODE_W, y: fromNode.y + NODE_H / 2 };
+    var end = { x: toNode.x, y: toNode.y + NODE_H / 2 };
+    var midX = (start.x + end.x) / 2;
+    var path = 'M' + start.x.toFixed(1) + ',' + start.y.toFixed(1) + ' C' + midX.toFixed(1) + ',' + start.y.toFixed(1) + ' ' + midX.toFixed(1) + ',' + end.y.toFixed(1) + ' ' + end.x.toFixed(1) + ',' + end.y.toFixed(1);
+    return '<path class="pipeline-edge" d="' + path + '" marker-end="url(#pipeline-arrow)"></path>' +
+      '<text class="pipeline-edge-label" x="' + midX.toFixed(1) + '" y="' + ((start.y + end.y) / 2 - 5).toFixed(1) + '">' + esc(label(edge.channel)) + '</text>';
+  }).join('');
+
+  var nodeSvg = nodes.map(function (node) {
+    if (node.kind === 'processor') {
+      return '<g class="pipeline-node processor" tabindex="0" role="button" data-entity="' + esc(termKey(node.term)) + '" transform="translate(' + node.x.toFixed(1) + ',' + node.y.toFixed(1) + ')"><title>' + esc(node.term.value) + '</title>' +
+        '<rect width="' + NODE_W + '" height="' + NODE_H + '" rx="8"></rect>' +
+        '<text class="pipeline-node-type" x="10" y="' + (node.label ? 21 : 30) + '">' + esc(node.typeLabel) + '</text>' +
+        (node.label ? '<text class="pipeline-node-label" x="10" y="39">' + esc(node.label) + '</text>' : '') + '</g>';
+    }
+    return '<g class="pipeline-node external" transform="translate(' + node.x.toFixed(1) + ',' + node.y.toFixed(1) + ')"><title>' + esc(node.term.value) + '</title>' +
+      '<rect width="' + NODE_W + '" height="' + NODE_H + '" rx="26"></rect>' +
+      '<text class="pipeline-node-label" x="' + (NODE_W / 2) + '" y="' + (NODE_H / 2 + 4) + '" text-anchor="middle">' + esc(node.label || 'external') + '</text></g>';
+  }).join('');
+
+  return '<svg class="pipeline-diagram" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Pipeline flow diagram">' +
+    '<defs><marker id="pipeline-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>' +
+    edgeSvg + nodeSvg + '</svg>';
+}
+
+// A simple clickable reference to another processor, styled like any other
+// inline entity link -- termHtml() isn't used here because for a blank-node
+// processor (the common case) it would inline that processor's entire
+// bounded nested description, not a short reference to it.
+function processorRefHtml(index, processorEntry) {
+  return '<button type="button" class="entity-link"' + selectAttr(processorEntry.entity.term, 'data-entity') + '>' + esc(processorTypeLabel(index, processorEntry.entity)) + '</button>';
+}
+
+function pipelineCards(index, processors, edges, label) {
+  function endpointHtml(other, channel) {
+    return '<li><span>' + esc(label(channel)) + '</span>' + (other ? processorRefHtml(index, other) : '<span class="pipeline-external">external</span>') + '</li>';
+  }
+  return '<div class="pipeline-list">' + processors.map(function (p) {
+    var incoming = edges.filter(function (e) { return e.to === p; });
+    var outgoing = edges.filter(function (e) { return e.from === p; });
+    return '<article' + selectAttr(p.entity.term) + '><h3>' + esc(processorTypeLabel(index, p.entity)) + '</h3>' +
+      (incoming.length ? '<div class="pipeline-io"><b>Reads from</b><ul>' + incoming.map(function (e) { return endpointHtml(e.from, e.channel); }).join('') + '</ul></div>' : '') +
+      (outgoing.length ? '<div class="pipeline-io"><b>Writes to</b><ul>' + outgoing.map(function (e) { return endpointHtml(e.to, e.channel); }).join('') + '</ul></div>' : '') +
+      '</article>';
+  }).join('') + '</div>';
+}
+
+function pipelineModule() {
+  return {
+    id: 'pipeline', title: 'Pipeline', priority: 890,
+    detect: function (index) { var found = pipelineProcessors(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index) {
+      var graph = pipelineGraph(index);
+      var label = makeChannelLabeler(index, graph.edges.map(function (e) { return e.channel; }));
+      return pipelineDiagramSvg(index, graph.processors, graph.edges, label) +
+        pipelineCards(index, graph.processors, graph.edges, label) +
+        '<p class="view-note">Channel names are shortened to what distinguishes them from one another, and only reflect what this snapshot resolved -- an unresolved input/output is shown as "external" rather than assumed to be a pipeline boundary by design.</p>';
+    }
+  };
+}
+
 function createRegistry() {
   return [
     overviewModule(), profilesModule(), imagesModule(), shaclModule(), formPreviewModule(), credentialsModule(),
@@ -916,7 +1238,7 @@ function createRegistry() {
       { label: 'Generated', predicates: [PROV + 'wasGeneratedBy', PROV + 'generated'] },
       { label: 'Attributed to', predicates: [PROV + 'wasAttributedTo', PROV + 'wasAssociatedWith'] }
     ], 690),
-    hypermediaModule(),
+    hypermediaModule(), pipelineModule(),
     cardsModule('organizations', 'Organizations', [ORG + 'Organization', ORG + 'OrganizationalUnit', ORG + 'Membership', ORG + 'Post'], [
       { label: 'Organization', predicates: [ORG + 'organization', ORG + 'unitOf'] },
       { label: 'Member', predicates: [ORG + 'member'] },
@@ -1126,7 +1448,7 @@ function createWorkbench(root, options) {
     var entityTarget = event.target.closest('[data-entity], [data-select-entity]');
     if (entityTarget) {
       var entityKey = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
-      if (!entityKey || entityKey.indexOf('NamedNode|') !== 0) return;
+      if (!entityKey) return;
       if (entityTarget.dataset.geometryId !== undefined && unmount && unmount.focus) unmount.focus(entityTarget.dataset.geometryId);
       selectEntity(entityKey);
     }

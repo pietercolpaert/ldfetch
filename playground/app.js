@@ -34,7 +34,9 @@ var COMMON_PREFIXES = {
   vc: 'https://www.w3.org/2018/credentials#',
   tree: 'https://w3id.org/tree#',
   ldes: 'https://w3id.org/ldes#',
-  tss: 'https://w3id.org/tss#'
+  tss: 'https://w3id.org/tss#',
+  rdfc: 'https://w3id.org/rdf-connect#',
+  conn: 'https://w3id.org/conn#'
 };
 
 var DEFAULT_FRAME = {
@@ -180,6 +182,13 @@ var EXAMPLES = {
   // overwritten by other testers over time.
   'fhir-patient': {
     url: 'https://hapi.fhir.org/baseR4/Patient/example'
+  },
+  // An RDF-Connect (https://rdf-connect.github.io/specification/) pipeline
+  // definition: processors (mostly blank nodes) wired together by conn:
+  // reader/writer channels. Served as text/plain by GitHub, so this relies
+  // on the .ttl extension fallback rather than a declared content type.
+  'rdf-connect-pipeline': {
+    url: 'https://raw.githubusercontent.com/rdf-connect/RDF-Connect-RINF-LDES/refs/heads/main/generation-pipeline/rdfc-pipeline.ttl'
   },
   'mol-ldes': {
     url: 'https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS.trig'

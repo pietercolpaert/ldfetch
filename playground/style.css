@@ -695,6 +695,29 @@ button {
 .hydra-search-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; margin-top: .75rem; }
 .hydra-search-actions [role="status"] { color: #9b3e29; font-size: .76rem; }
 
+.pipeline-diagram { display: block; width: 100%; max-height: 26rem; margin-bottom: 1rem; overflow: auto; }
+.pipeline-edge { fill: none; stroke: #9db4c8; stroke-width: 1.5; }
+.pipeline-edge-label { fill: #647180; font-family: var(--font-mono); font-size: 9px; text-anchor: middle; }
+#pipeline-arrow path { fill: #9db4c8; }
+.pipeline-node rect { fill: white; stroke: #aebfd0; stroke-width: 1; }
+.pipeline-node.processor { cursor: pointer; }
+.pipeline-node.processor rect { stroke-width: 1.5; }
+.pipeline-node.processor:hover rect, .pipeline-node.processor:focus-visible rect { stroke: var(--accent); fill: #fffaf1; }
+.pipeline-node.processor:focus-visible { outline: none; }
+.pipeline-node.external rect { stroke-dasharray: 4 3; fill: #f4f7fa; }
+.pipeline-node-type { fill: var(--primary); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+.pipeline-node-label { fill: var(--text); font-size: 10px; }
+.pipeline-list { display: grid; gap: 0.8rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.pipeline-list article { padding: 0.85rem; border: 1px solid #dfe6ee; border-radius: 8px; background: white; }
+.pipeline-list article[data-select-entity] { cursor: pointer; }
+.pipeline-list h3 { margin: 0 0 0.5rem; color: var(--primary); font-family: var(--font-mono); font-size: 0.85rem; }
+.pipeline-io { margin: 0.4rem 0; }
+.pipeline-io b { display: block; margin-bottom: 0.2rem; color: #566a7d; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.pipeline-io ul { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.pipeline-io li { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.8rem; }
+.pipeline-io li span:first-child { color: #647180; font-family: var(--font-mono); font-size: 0.72rem; }
+.pipeline-external { color: #9b6b3e; font-style: italic; }
+
 .bar-chart { display: grid; gap: 0.3rem; }
 .bar-chart button, .bar-chart .bar-row {
   position: relative;
