@@ -45,6 +45,11 @@ var DEFAULT_FRAME = {
 };
 
 var DEFAULT_PROXY = 'https://proxy.linkeddatafragments.org/';
+// The proxy negotiates the requested output format itself and rejects its
+// otherwise valid request when Jelly-RDF is among the advertised media types.
+// Ask for the RDF formats it supports; direct requests keep ldfetch's broader
+// Accept header, including Jelly-RDF.
+var PROXY_ACCEPT = 'application/n-quads,application/trig;q=0.95,application/ld+json;q=0.9,application/n-triples;q=0.8,*/*;q=0.1';
 
 var OUTPUT_FORMATS = {
   trig: {
@@ -242,6 +247,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var fetchBtn = document.getElementById('fetch-btn');
   var advanced = document.getElementById('advanced');
   var proxyToggle = document.getElementById('proxy-toggle');
+  var proxyUrlField = document.getElementById('proxy-url-field');
   var proxyInput = document.getElementById('proxy-url');
   var outputFormat = document.getElementById('output-format');
   var frameOptions = document.getElementById('frame-options');
@@ -415,7 +421,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (params.has('url')) urlInput.value = params.get('url');
     proxyToggle.checked = params.has('proxy') && !!params.get('proxy');
     proxyInput.value = proxyToggle.checked ? params.get('proxy') : DEFAULT_PROXY;
-    proxyInput.disabled = !proxyToggle.checked;
+    proxyUrlField.hidden = !proxyToggle.checked;
     if (OUTPUT_FORMATS[params.get('format')]) outputFormat.value = params.get('format');
     frameToggle.checked = params.get('frameEnabled') === '1';
     if (params.has('frame')) frameCm.setValue(params.get('frame'));
@@ -449,7 +455,7 @@ document.addEventListener('DOMContentLoaded', function () {
   advanced.addEventListener('toggle', updateHash);
   proxyToggle.addEventListener('change', function () {
     if (proxyToggle.checked && !proxyInput.value.trim()) proxyInput.value = DEFAULT_PROXY;
-    proxyInput.disabled = !proxyToggle.checked;
+    proxyUrlField.hidden = !proxyToggle.checked;
     updateHash();
   });
   proxyInput.addEventListener('input', updateHash);
@@ -963,7 +969,9 @@ document.addEventListener('DOMContentLoaded', function () {
     visualizationWorkbench.reset(COMMON_PREFIXES, 'loaded document');
     setStatus('Fetching …');
 
-    var fetcher = new window.ldfetch({ proxy: proxyToggle.checked ? proxyInput.value.trim() : '' });
+    var fetcherOptions = { proxy: proxyToggle.checked ? proxyInput.value.trim() : '' };
+    if (proxyToggle.checked) fetcherOptions.headers = { Accept: PROXY_ACCEPT };
+    var fetcher = new window.ldfetch(fetcherOptions);
     Object.keys(COMMON_PREFIXES).forEach(function (name) {
       fetcher.addPrefix(name, COMMON_PREFIXES[name]);
     });

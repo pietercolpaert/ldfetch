@@ -16,6 +16,7 @@ const puppeteer = require('puppeteer-core');
       quad(namedNode('https://example.org/s' + i), namedNode('https://example.org/p' + j), literal('Jelly value ' + i))));
     writer.end((error, bytes) => error ? reject(error) : resolve(require('node:zlib').gzipSync(bytes)));
   });
+  let proxiedAccept;
   const server = http.createServer((req, res) => {
     if (req.url === '/prefixes.trig') {
       res.setHeader('Content-Type', 'application/trig');
@@ -48,6 +49,7 @@ const puppeteer = require('puppeteer-core');
       return;
     }
     if (req.url.startsWith('/proxy/http://') && req.url.endsWith('/proxied.ttl')) {
+      proxiedAccept = req.headers.accept;
       res.setHeader('Content-Type', 'text/turtle');
       res.end('<#resource> <https://schema.org/name> "Fetched through proxy".');
       return;
@@ -75,7 +77,7 @@ const puppeteer = require('puppeteer-core');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     assert.equal(await page.$eval('#proxy-toggle', el => el.checked), false);
     assert.equal(await page.$eval('#proxy-url', el => el.value), 'https://proxy.linkeddatafragments.org/');
-    assert.equal(await page.$eval('#proxy-url', el => el.disabled), true);
+    assert.equal(await page.$eval('#proxy-url-field', el => el.hidden), true);
     assert.equal(page.url().includes('proxy='), false);
     assert.equal(await page.$$eval('#examples-list > .example-chip', nodes => nodes.length), 3, 'Only a minimal set of examples stays visible');
     await page.click('#more-examples > summary');
@@ -219,10 +221,13 @@ const puppeteer = require('puppeteer-core');
     }, base + 'proxy/', base + 'proxied.ttl');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     assert.ok(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue().includes('Fetched through proxy')));
+    assert.match(proxiedAccept, /^application\/n-quads/);
+    assert.equal(proxiedAccept.includes('jelly'), false);
     assert.ok(page.url().includes('proxy=' + encodeURIComponent(base + 'proxy/')));
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     assert.equal(await page.$eval('#proxy-toggle', el => el.checked), true);
+    assert.equal(await page.$eval('#proxy-url-field', el => el.hidden), false);
     assert.equal(await page.$eval('#proxy-url', el => el.value), base + 'proxy/');
     assert.deepEqual(errors, []);
     console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout.');

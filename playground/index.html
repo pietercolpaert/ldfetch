@@ -95,19 +95,6 @@
   <details id="advanced" class="advanced">
     <summary>Advanced</summary>
     <div class="advanced-options">
-      <div class="field proxy-field">
-        <p>In case you’re experiencing CORS issues, you can set a proxy:</p>
-        <label class="proxy-toggle-label">
-          <input id="proxy-toggle" type="checkbox">
-          Use a proxy
-        </label>
-        <label for="proxy-url">Proxy URL</label>
-        <input id="proxy-url" type="url" spellcheck="false" autocomplete="off"
-               value="https://proxy.linkeddatafragments.org/"
-               placeholder="https://proxy.example/" disabled>
-        <small>The document URL is appended directly to this URL.</small>
-      </div>
-
       <div class="field format-field">
         <label for="output-format">Output format</label>
         <select id="output-format">
@@ -115,6 +102,19 @@
           <option value="nquads">N-Quads</option>
           <option value="jsonld">JSON-LD</option>
         </select>
+      </div>
+
+      <div class="field proxy-field">
+        <p>In case you’re experiencing CORS issues, you can set a proxy:</p>
+        <label class="proxy-toggle-label">
+          <input id="proxy-toggle" type="checkbox">
+          Use a proxy
+        </label>
+        <div id="proxy-url-field" hidden>
+          <input id="proxy-url" type="url" spellcheck="false" autocomplete="off"
+                 value="https://proxy.linkeddatafragments.org/"
+                 placeholder="https://proxy.example/" aria-label="Proxy URL">
+        </div>
       </div>
 
       <div id="frame-options" class="frame-options" hidden>
