@@ -82,8 +82,8 @@ ex:credential a vc:VerifiableCredential ;
   vc:credentialSubject ex:alice ; vc:validFrom "2026-01-01T00:00:00Z"^^xsd:dateTime .
 ex:university a prov:Agent ; rdfs:label "Example University" .
 
-ex:manifest a iiif:Manifest ; dcterms:title "Example image presentation" ; as:items (ex:canvas) .
-ex:canvas a iiif:Canvas ; dcterms:title "Portrait canvas" ; as:items (ex:annotationPage) .
+ex:manifest a iiif:Manifest ; dcterms:title "Voorbeeldpresentatie"@nl, "Example image presentation"@en ; as:items (ex:canvas) .
+ex:canvas a iiif:Canvas ; dcterms:title "Portretcanvas"@nl, "Portrait canvas"@en ; as:items (ex:annotationPage) .
 ex:annotationPage a iiif:AnnotationPage ; as:items (ex:annotation ex:portraitTag) .
 ex:annotation a oa:Annotation ; oa:motivatedBy oa:painting ; oa:hasTarget ex:canvas ; oa:hasBody <avatar-alice.svg> .
 ex:portraitTag a oa:Annotation ; dcterms:title "Portrait" ; oa:motivatedBy oa:tagging ;

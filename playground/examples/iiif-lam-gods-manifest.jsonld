@@ -7,8 +7,11 @@
   "id": "",
   "type": "Manifest",
   "label": {
+    "nl": [
+      "Lam Gods (Hubert en Jan van Eyck)"
+    ],
     "en": [
-      "Lam gods (Hubert and Jan Van Eyck)"
+      "Ghent Altarpiece (Hubert and Jan van Eyck)"
     ]
   },
   "metadata": [
@@ -53,6 +56,9 @@
     "label": {
       "nl": [
         "Rechten"
+      ],
+      "en": [
+        "Rights"
       ]
     },
     "value": {
@@ -66,8 +72,11 @@
       "id": "canvas/p1",
       "type": "Canvas",
       "label": {
-        "en": [
+        "nl": [
           "Lam Gods, open"
+        ],
+        "en": [
+          "Ghent Altarpiece, open"
         ]
       },
       "height": 2456,
@@ -126,9 +135,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Het offer van Kaïn en Abel"
-                ]
+                "nl": ["Het offer van Kaïn en Abel"],
+                "en": ["The Sacrifice of Cain and Abel"]
               },
               "body": {
                 "type": "TextualBody",
@@ -142,9 +150,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Adam"
-                ]
+                "nl": ["Adam"],
+                "en": ["Adam"]
               },
               "body": {
                 "type": "TextualBody",
@@ -158,9 +165,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Zingende Engelen"
-                ]
+                "nl": ["Zingende engelen"],
+                "en": ["Singing Angels"]
               },
               "body": {
                 "type": "TextualBody",
@@ -174,9 +180,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Rechtvaardige Rechters"
-                ]
+                "nl": ["De Rechtvaardige Rechters"],
+                "en": ["The Just Judges"]
               },
               "body": {
                 "type": "TextualBody",
@@ -190,9 +195,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Ridders van Christus"
-                ]
+                "nl": ["De Ridders van Christus"],
+                "en": ["The Knights of Christ"]
               },
               "body": {
                 "type": "TextualBody",
@@ -206,9 +210,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Maria"
-                ]
+                "nl": ["Maria"],
+                "en": ["The Virgin Mary"]
               },
               "body": {
                 "type": "TextualBody",
@@ -222,9 +225,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "God op de Troon"
-                ]
+                "nl": ["God op de troon"],
+                "en": ["God Almighty"]
               },
               "body": {
                 "type": "TextualBody",
@@ -238,9 +240,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Johannes De Doper"
-                ]
+                "nl": ["Johannes de Doper"],
+                "en": ["Saint John the Baptist"]
               },
               "body": {
                 "type": "TextualBody",
@@ -254,9 +255,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "De aanbidding van het Lam"
-                ]
+                "nl": ["De aanbidding van het Lam Gods"],
+                "en": ["The Adoration of the Mystic Lamb"]
               },
               "body": {
                 "type": "TextualBody",
@@ -270,9 +270,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Musicerende Engelen"
-                ]
+                "nl": ["Musicerende engelen"],
+                "en": ["Music-Making Angels"]
               },
               "body": {
                 "type": "TextualBody",
@@ -286,9 +285,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "De moord op Kaïn en Abel"
-                ]
+                "nl": ["De moord op Abel"],
+                "en": ["The Murder of Abel"]
               },
               "body": {
                 "type": "TextualBody",
@@ -302,9 +300,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "Eva"
-                ]
+                "nl": ["Eva"],
+                "en": ["Eve"]
               },
               "body": {
                 "type": "TextualBody",
@@ -318,9 +315,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "De Kluizenaars"
-                ]
+                "nl": ["De kluizenaars"],
+                "en": ["The Hermits"]
               },
               "body": {
                 "type": "TextualBody",
@@ -334,9 +330,8 @@
               "type": "Annotation",
               "motivation": "tagging",
               "label": {
-                "en": [
-                  "De Pelgrims op Bedevaart"
-                ]
+                "nl": ["De pelgrims"],
+                "en": ["The Pilgrims"]
               },
               "body": {
                 "type": "TextualBody",
@@ -353,9 +348,8 @@
       "id": "canvas/p2",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Het offer van Kain en Abel"
-        ]
+        "nl": ["Het offer van Kaïn en Abel"],
+        "en": ["The Sacrifice of Cain and Abel"]
       },
       "height": 3508,
       "width": 2427,
@@ -392,9 +386,8 @@
       "id": "canvas/p3",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Adam"
-        ]
+        "nl": ["Adam"],
+        "en": ["Adam"]
       },
       "height": 3507,
       "width": 880,
@@ -431,9 +424,8 @@
       "id": "canvas/p4",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Zingende Engelen"
-        ]
+        "nl": ["Zingende engelen"],
+        "en": ["Singing Angels"]
       },
       "height": 3488,
       "width": 1783,
@@ -470,9 +462,8 @@
       "id": "canvas/p5",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Rechtvaardige Rechters"
-        ]
+        "nl": ["De Rechtvaardige Rechters"],
+        "en": ["The Just Judges"]
       },
       "height": 3509,
       "width": 1478,
@@ -509,9 +500,8 @@
       "id": "canvas/p6",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Ridders van Christus"
-        ]
+        "nl": ["De Ridders van Christus"],
+        "en": ["The Knights of Christ"]
       },
       "height": 3507,
       "width": 1461,
@@ -548,9 +538,8 @@
       "id": "canvas/p7",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Maria"
-        ]
+        "nl": ["Maria"],
+        "en": ["The Virgin Mary"]
       },
       "height": 3507,
       "width": 1673,
@@ -587,9 +576,8 @@
       "id": "canvas/p8",
       "type": "Canvas",
       "label": {
-        "en": [
-          "God op de troon"
-        ]
+        "nl": ["God op de troon"],
+        "en": ["God Almighty"]
       },
       "height": 3419,
       "width": 1339,
@@ -626,9 +614,8 @@
       "id": "canvas/p9",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Johannes de Doper"
-        ]
+        "nl": ["Johannes de Doper"],
+        "en": ["Saint John the Baptist"]
       },
       "height": 3507,
       "width": 1711,
@@ -665,9 +652,8 @@
       "id": "canvas/p10",
       "type": "Canvas",
       "label": {
-        "en": [
-          "De aanbidding van het Lam"
-        ]
+        "nl": ["De aanbidding van het Lam Gods"],
+        "en": ["The Adoration of the Mystic Lamb"]
       },
       "height": 2228,
       "width": 3508,
@@ -704,9 +690,8 @@
       "id": "canvas/p11",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Musicerende Engelen"
-        ]
+        "nl": ["Musicerende engelen"],
+        "en": ["Music-Making Angels"]
       },
       "height": 3508,
       "width": 1775,
@@ -743,9 +728,8 @@
       "id": "canvas/p12",
       "type": "Canvas",
       "label": {
-        "en": [
-          "De moord op Kaïn en Abel"
-        ]
+        "nl": ["De moord op Abel"],
+        "en": ["The Murder of Abel"]
       },
       "height": 3508,
       "width": 2427,
@@ -782,9 +766,8 @@
       "id": "canvas/p13",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Eva"
-        ]
+        "nl": ["Eva"],
+        "en": ["Eve"]
       },
       "height": 3508,
       "width": 893,
@@ -821,9 +804,8 @@
       "id": "canvas/p14",
       "type": "Canvas",
       "label": {
-        "en": [
-          "De Kluizenaars"
-        ]
+        "nl": ["De kluizenaars"],
+        "en": ["The Hermits"]
       },
       "height": 3507,
       "width": 1517,
@@ -860,9 +842,8 @@
       "id": "canvas/p15",
       "type": "Canvas",
       "label": {
-        "en": [
-          "De Pelgrims op Bedevaart"
-        ]
+        "nl": ["De pelgrims"],
+        "en": ["The Pilgrims"]
       },
       "height": 3508,
       "width": 1434,
@@ -899,9 +880,8 @@
       "id": "canvas/p16",
       "type": "Canvas",
       "label": {
-        "en": [
-          "Lam gods, gesloten"
-        ]
+        "nl": ["Lam Gods, gesloten"],
+        "en": ["Ghent Altarpiece, closed"]
       },
       "height": 3508,
       "width": 2456,
@@ -940,18 +920,16 @@
       "id": "range/r1",
       "type": "Range",
       "label": {
-        "en": [
-          "Open"
-        ]
+        "nl": ["Geopend"],
+        "en": ["Open"]
       },
       "items": [
         {
           "id": "range/r1/1",
           "type": "Range",
           "label": {
-            "en": [
-              "Volledig"
-            ]
+            "nl": ["Volledig"],
+            "en": ["Complete view"]
           },
           "items": [
             {
@@ -964,18 +942,16 @@
           "id": "range/r1/2",
           "type": "Range",
           "label": {
-            "en": [
-              "Links"
-            ]
+            "nl": ["Links"],
+            "en": ["Left"]
           },
           "items": [
             {
               "id": "range/r1/2/1",
               "type": "Range",
               "label": {
-                "en": [
-                  "Het offer van Kaïn en Abel"
-                ]
+                "nl": ["Het offer van Kaïn en Abel"],
+                "en": ["The Sacrifice of Cain and Abel"]
               },
               "items": [
                 {
@@ -988,9 +964,8 @@
               "id": "range/r1/2/2",
               "type": "Range",
               "label": {
-                "en": [
-                  "Adam"
-                ]
+                "nl": ["Adam"],
+                "en": ["Adam"]
               },
               "items": [
                 {
@@ -1003,9 +978,8 @@
               "id": "range/r1/2/3",
               "type": "Range",
               "label": {
-                "en": [
-                  "Zingende Engelen"
-                ]
+                "nl": ["Zingende engelen"],
+                "en": ["Singing Angels"]
               },
               "items": [
                 {
@@ -1018,9 +992,8 @@
               "id": "range/r1/2/4",
               "type": "Range",
               "label": {
-                "en": [
-                  "Rechtvaardige rechters"
-                ]
+                "nl": ["De Rechtvaardige Rechters"],
+                "en": ["The Just Judges"]
               },
               "items": [
                 {
@@ -1033,9 +1006,8 @@
               "id": "range/r1/2/5",
               "type": "Range",
               "label": {
-                "en": [
-                  "Ridders van Christus"
-                ]
+                "nl": ["De Ridders van Christus"],
+                "en": ["The Knights of Christ"]
               },
               "items": [
                 {
@@ -1050,9 +1022,8 @@
           "id": "range/r1/3",
           "type": "Range",
           "label": {
-            "en": [
-              "Centraal"
-            ]
+            "nl": ["Centraal"],
+            "en": ["Centre"]
           },
           "items": [
             {
@@ -1077,9 +1048,8 @@
           "id": "range/r1/4",
           "type": "Range",
           "label": {
-            "en": [
-              "Rechts"
-            ]
+            "nl": ["Rechts"],
+            "en": ["Right"]
           },
           "items": [
             {
@@ -1110,18 +1080,16 @@
       "id": "range/r2",
       "type": "Range",
       "label": {
-        "en": [
-          "Gesloten"
-        ]
+        "nl": ["Gesloten"],
+        "en": ["Closed"]
       },
       "items": [
         {
           "id": "range/r2/1",
           "type": "Range",
           "label": {
-            "en": [
-              "Volledig"
-            ]
+            "nl": ["Volledig"],
+            "en": ["Complete view"]
           },
           "items": [
             {

@@ -426,7 +426,7 @@ button {
 .viewer-scope { margin: 0; font-size: 0.78rem; color: #647180; }
 
 .viewer-controls { flex: 0 1 31rem; display: flex; align-items: flex-end; justify-content: flex-end; gap: 0.6rem; }
-.viewer-filter, .viewer-graph {
+.viewer-filter, .viewer-graph, .viewer-language {
   display: grid;
   gap: 0.2rem;
   font-size: 0.75rem;
@@ -435,8 +435,9 @@ button {
 }
 .viewer-filter { flex: 1 1 17rem; }
 .viewer-graph { flex: 0 1 12rem; }
+.viewer-language { flex: 0 0 7rem; }
 
-.viewer-filter input, .viewer-graph select {
+.viewer-filter input, .viewer-graph select, .viewer-language select {
   width: 100%;
   border: 1px solid #bfcce0;
   border-radius: 999px;
@@ -446,7 +447,7 @@ button {
   color: var(--text);
 }
 
-.viewer-filter input:focus, .viewer-graph select:focus { outline: 2px solid var(--primary-light); outline-offset: 1px; }
+.viewer-filter input:focus, .viewer-graph select:focus, .viewer-language select:focus { outline: 2px solid var(--primary-light); outline-offset: 1px; }
 
 .view-tabs {
   display: flex;
@@ -992,6 +993,7 @@ button {
   .viewer-controls { flex-basis: auto; flex-direction: column; align-items: stretch; }
   .viewer-filter { flex-basis: auto; }
   .viewer-graph { flex-basis: auto; }
+  .viewer-language { flex-basis: auto; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .details-table th { width: auto; }
   .shape-flow { grid-template-columns: 1fr; }

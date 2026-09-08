@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const dataModel = require('@rdfjs/data-model').default;
 const { DatasetIndex, createRegistry, detectAvailable, expandHydraTemplate, extractTimeSeries, termKey } = require('../playground/visualizations');
 
@@ -28,6 +30,44 @@ test('visualization index preserves repeated values, incoming links, and graph i
   assert.equal(index.entity(alice).properties.get(FOAF + 'knows').length, 3, 'raw per-property evidence retains repeated objects');
   assert.equal(index.incoming.get(termKey(bob)).length, 2, 'both incoming statements remain available');
   assert.equal(index.graphs.size, 2);
+});
+
+test('visualization labels follow the selected language with sensible fallbacks', () => {
+  const work = dataModel.namedNode('https://example.test/altarpiece');
+  const title = dataModel.namedNode('http://purl.org/dc/terms/title');
+  const index = new DatasetIndex();
+  index.addAll([
+    dataModel.quad(work, title, dataModel.literal('Lam Gods', 'nl')),
+    dataModel.quad(work, title, dataModel.literal('Ghent Altarpiece', 'en'))
+  ]);
+
+  index.preferredLanguages = ['nl-be'];
+  assert.equal(index.label(work), 'Lam Gods');
+  index.preferredLanguages = ['en-us'];
+  assert.equal(index.label(work), 'Ghent Altarpiece');
+  index.preferredLanguages = ['fr'];
+  assert.equal(index.label(work), 'Lam Gods');
+});
+
+test('Ghent Altarpiece JSON-LD labels are bilingual', () => {
+  const file = path.join(__dirname, '../playground/examples/iiif-lam-gods-manifest.jsonld');
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const labels = [];
+  function collect(value) {
+    if (Array.isArray(value)) return value.forEach(collect);
+    if (!value || typeof value !== 'object') return;
+    if (value.label) labels.push(value.label);
+    Object.values(value).forEach(collect);
+  }
+  collect(manifest);
+
+  assert.ok(labels.length > 40);
+  labels.forEach(label => {
+    assert.ok(label.nl?.length, 'every label has a Dutch value');
+    assert.ok(label.en?.length, 'every label has an English value');
+  });
+  assert.equal(manifest.label.en[0], 'Ghent Altarpiece (Hubert and Jan van Eyck)');
+  assert.equal(manifest.items[9].label.en[0], 'The Adoration of the Mystic Lamb');
 });
 
 test('registry progressively detects profile, SHACL, temporal, and numeric views', () => {

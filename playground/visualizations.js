@@ -62,6 +62,7 @@ function uniqueTerms(terms) {
 
 function DatasetIndex(prefixes) {
   this.prefixes = Object.assign({}, prefixes || {});
+  this.preferredLanguages = [];
   this.entities = new Map();
   this.incoming = new Map();
   this.quads = [];
@@ -179,8 +180,13 @@ DatasetIndex.prototype.label = function (entityOrTerm) {
   if (entity) {
     for (var i = 0; i < LABELS.length; i++) {
       var values = this.values(entity, LABELS[i]);
-      var english = values.find(function (term) { return term.language === 'en'; });
-      if (english) return english.value;
+      for (var languageIndex = 0; languageIndex < this.preferredLanguages.length; languageIndex++) {
+        var preferred = this.preferredLanguages[languageIndex];
+        var localized = values.find(function (term) { return term.language.toLowerCase() === preferred || term.language.toLowerCase().split('-')[0] === preferred.split('-')[0]; });
+        if (localized) return localized.value;
+      }
+      var untagged = values.find(function (term) { return !term.language; });
+      if (untagged) return untagged.value;
       if (values.length) return values[0].value;
     }
   }
@@ -1433,10 +1439,11 @@ function rankViews(available) {
 
 function createWorkbench(root, options) {
   options = options || {};
+  var browserLanguages = (typeof navigator !== 'undefined' && navigator.languages ? navigator.languages : ['en']).map(function (language) { return language.toLowerCase(); });
   var registry = options.registry || createRegistry();
   var index = new DatasetIndex();
   var allIndex = index;
-  var state = { view: '', filter: '', entity: '', graph: '', partial: false, scopeLabel: 'loaded document' };
+  var state = { view: '', language: '', filter: '', entity: '', graph: '', partial: false, scopeLabel: 'loaded document' };
   var renderTimer = null;
   var disposed = false;
   var visible = false;
@@ -1475,6 +1482,24 @@ function createWorkbench(root, options) {
       return '<option value="' + esc(entry[0]) + '">' + esc(allIndex.label(entry[1])) + '</option>';
     }).join('');
     graphSelect.value = state.graph;
+    var languageField = root.querySelector('[data-language-field]');
+    var languageSelect = root.querySelector('[data-view-language]');
+    var availableLanguages = [];
+    allIndex.quads.forEach(function (quad) {
+      if (quad.object.termType === 'Literal' && quad.object.language && availableLanguages.indexOf(quad.object.language.toLowerCase()) === -1) availableLanguages.push(quad.object.language.toLowerCase());
+    });
+    availableLanguages.sort();
+    languageField.hidden = availableLanguages.length < 2;
+    if (availableLanguages.length) {
+      if (!state.language || availableLanguages.indexOf(state.language) === -1) {
+        state.language = browserLanguages.map(function (language) {
+          return availableLanguages.find(function (available) { return available === language || available.split('-')[0] === language.split('-')[0]; });
+        }).find(Boolean) || (availableLanguages.indexOf('en') !== -1 ? 'en' : availableLanguages[0]);
+      }
+      languageSelect.innerHTML = availableLanguages.map(function (language) { return '<option value="' + esc(language) + '">' + esc(language.toUpperCase()) + '</option>'; }).join('');
+      languageSelect.value = state.language;
+    }
+    allIndex.preferredLanguages = index.preferredLanguages = [state.language].concat(browserLanguages).filter(Boolean);
     var ids = available.map(function (item) { return item.module.id; });
     if (!state.view || ids.indexOf(state.view) === -1) state.view = ranked.primary.length ? ranked.primary[0].module.id : 'overview';
     var active = available.find(function (item) { return item.module.id === state.view; }) || available[0];
@@ -1681,8 +1706,14 @@ function createWorkbench(root, options) {
     render();
     notify();
   });
+  root.querySelector('[data-view-language]').addEventListener('change', function (event) {
+    state.language = event.target.value;
+    allIndex.preferredLanguages = index.preferredLanguages = [state.language].concat(browserLanguages).filter(Boolean);
+    render();
+    notify();
+  });
 
-  function getState() { return { view: state.view, filter: state.filter, entity: state.entity, graph: state.graph, camera: state.camera }; }
+  function getState() { return { view: state.view, language: state.language, filter: state.filter, entity: state.entity, graph: state.graph, camera: state.camera }; }
 
   function validateShacl() {
     state.validationHtml = '<div class="validation-result pending">Loading the SHACL engine…</div>';
@@ -1720,6 +1751,7 @@ function createWorkbench(root, options) {
   function restoreState(next) {
     if (!next) return;
     state.view = next.view === 'profile' ? 'overview' : next.view || '';
+    state.language = next.language || '';
     state.camera = next.camera;
     state.filter = next.filter || '';
     state.entity = next.entity || '';

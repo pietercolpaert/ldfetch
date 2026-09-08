@@ -141,7 +141,7 @@ var EXAMPLES = {
   // unchanged: this is genuinely how the polyptych's IIIF description
   // looks, painting-image annotations, tagging annotations, and all.
   'iiif-lam-gods': {
-    url: new URL('examples/iiif-lam-gods-manifest.json', document.baseURI).href
+    url: new URL('examples/iiif-lam-gods-manifest.jsonld', document.baseURI).href
   },
   owl: {
     url: 'https://www.w3.org/2002/07/owl.ttl'
@@ -396,6 +396,7 @@ document.addEventListener('DOMContentLoaded', function () {
       params.set('frame', frameCm.getValue());
     }
     if (visualizationState.view && visualizationState.view !== 'overview') params.set('view', visualizationState.view);
+    if (visualizationState.language) params.set('lang', visualizationState.language);
     if (visualizationState.filter) params.set('filter', visualizationState.filter);
     if (visualizationState.entity) params.set('entity', visualizationState.entity);
     if (visualizationState.graph) params.set('graph', visualizationState.graph);
@@ -435,6 +436,7 @@ document.addEventListener('DOMContentLoaded', function () {
     advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked || proxyToggle.checked;
     visualizationWorkbench.restoreState({
       view: params.get('view') || '',
+      language: params.get('lang') || '',
       filter: params.get('filter') || '',
       entity: params.get('entity') || '',
       graph: params.get('graph') || '',
