@@ -47,6 +47,11 @@ const puppeteer = require('puppeteer-core');
       res.end('<https://example.org/member> <http://www.w3.org/2000/01/rdf-schema#label> "Loaded next page".');
       return;
     }
+    if (req.url.startsWith('/proxy/http://') && req.url.endsWith('/proxied.ttl')) {
+      res.setHeader('Content-Type', 'text/turtle');
+      res.end('<#resource> <https://schema.org/name> "Fetched through proxy".');
+      return;
+    }
     if (req.url === '/blank-nodes.ttl') {
       res.setHeader('Content-Type', 'text/turtle');
       res.end('@prefix geo: <http://www.opengis.net/ont/geosparql#>. @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>. @prefix ex: <https://example.org/>. ex:feature rdfs:label "Named blank-node geometry"; ex:address [ ex:street "Main Street" ]; geo:hasGeometry _:geometry. _:geometry geo:asWKT "POINT (4 50)"^^geo:wktLiteral. ex:first ex:place _:ambiguous. ex:second ex:place _:ambiguous. _:ambiguous geo:asWKT "POINT (5 51)"^^geo:wktLiteral.');
@@ -66,8 +71,10 @@ const puppeteer = require('puppeteer-core');
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const base = 'http://127.0.0.1:' + server.address().port + '/';
-    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/geospatial-messages.trig'));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/geospatial-messages.trig') + '&proxy=');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    assert.equal(await page.$eval('#proxy-url', el => el.value), '');
+    assert.ok(page.url().includes('proxy='));
     assert.equal(await page.$$eval('#examples-list > .example-chip', nodes => nodes.length), 3, 'Only a minimal set of examples stays visible');
     await page.click('#more-examples > summary');
     assert.ok(await page.$$eval('.example-menu h3', nodes => nodes.map(node => node.textContent).includes('Hypermedia controls')));
@@ -198,6 +205,16 @@ const puppeteer = require('puppeteer-core');
     await page.waitForFunction(() => document.querySelector('#message-editor .CodeMirror').CodeMirror.getValue().startsWith('{'));
     assert.ok(await page.$eval('#message-editor .CodeMirror', el => JSON.parse(el.CodeMirror.getValue())));
     assert.equal(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue()), '', 'JSON-LD framing only renders the selected scope');
+    await page.evaluate((proxy, url) => {
+      const proxyInput = document.querySelector('#proxy-url');
+      proxyInput.value = proxy;
+      proxyInput.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('#url').value = url;
+      document.querySelector('#url-form').requestSubmit();
+    }, base + 'proxy/', base + 'proxied.ttl');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    assert.ok(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue().includes('Fetched through proxy')));
+    assert.ok(page.url().includes('proxy=' + encodeURIComponent(base + 'proxy/')));
     assert.deepEqual(errors, []);
     console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }

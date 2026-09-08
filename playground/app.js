@@ -44,6 +44,8 @@ var DEFAULT_FRAME = {
   '@type': 'foaf:PersonalProfileDocument'
 };
 
+var DEFAULT_PROXY = 'https://proxy.linkeddatafragments.org/';
+
 var OUTPUT_FORMATS = {
   trig: {
     label: 'TriG',
@@ -115,6 +117,20 @@ var EXAMPLES = {
   },
   geospatial: {
     url: new URL('examples/geospatial-messages.trig', document.baseURI).href
+  },
+  // The IIIF Presentation manifest for the Ghent Altarpiece ("The Adoration
+  // of the Mystic Lamb", Hubert & Jan Van Eyck), from the Flemish Art
+  // Collection's own IIIF metadata repository. Fixed up from the upstream
+  // source (github.com/VlaamseKunstcollectie/IIIF-metadata): every canvas/
+  // page/annotation id there was a leftover http://127.0.0.1:8887/... from
+  // local development, never replaced with a real identifier, and one wing
+  // of the "Open" range had three sibling Range nodes all sharing the id
+  // #range/r1/2/1 instead of being numbered sequentially -- both fixed
+  // here to relative, resolve-against-fetch-location ids. Otherwise
+  // unchanged: this is genuinely how the polyptych's IIIF description
+  // looks, painting-image annotations, tagging annotations, and all.
+  'iiif-lam-gods': {
+    url: new URL('examples/iiif-lam-gods-manifest.json', document.baseURI).href
   },
   owl: {
     url: 'https://www.w3.org/2002/07/owl.ttl'
@@ -225,6 +241,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var urlInput = document.getElementById('url');
   var fetchBtn = document.getElementById('fetch-btn');
   var advanced = document.getElementById('advanced');
+  var proxyInput = document.getElementById('proxy-url');
   var outputFormat = document.getElementById('output-format');
   var frameOptions = document.getElementById('frame-options');
   var frameToggle = document.getElementById('frame-toggle');
@@ -352,6 +369,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var params = new URLSearchParams();
     var visualizationState = visualizationWorkbench.getState();
     params.set('url', urlInput.value.trim());
+    // Keep an explicitly cleared proxy shareable too. Omitting it would make
+    // a reload silently restore DEFAULT_PROXY from the form's initial value.
+    params.set('proxy', proxyInput.value.trim());
     params.set('format', outputFormat.value);
     if (activePane === 'explore') params.set('pane', 'explore');
     if (messageScope.value !== 'current') params.set('scope', messageScope.value);
@@ -394,11 +414,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var camera = (params.get('camera') || '').split(',').map(Number);
     if (camera.length !== 3 || !camera.every(Number.isFinite) || Math.abs(camera[0]) > 180 || Math.abs(camera[1]) > 90 || camera[2] < 0 || camera[2] > 22) camera = undefined;
     if (params.has('url')) urlInput.value = params.get('url');
+    if (params.has('proxy')) proxyInput.value = params.get('proxy');
     if (OUTPUT_FORMATS[params.get('format')]) outputFormat.value = params.get('format');
     frameToggle.checked = params.get('frameEnabled') === '1';
     if (params.has('frame')) frameCm.setValue(params.get('frame'));
     restoredMessagePosition = params.has('message') ? Math.max(1, parseInt(params.get('message'), 10) || 1) : null;
-    advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked;
+    advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked || proxyInput.value !== DEFAULT_PROXY;
     visualizationWorkbench.restoreState({
       view: params.get('view') || '',
       filter: params.get('filter') || '',
@@ -425,6 +446,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   advanced.addEventListener('toggle', updateHash);
+  proxyInput.addEventListener('input', updateHash);
   urlInput.addEventListener('input', function () {
     // A message number belongs to the previously loaded URL and must not be
     // carried into a different source while the user edits the address.
@@ -732,7 +754,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setStatus('Connecting …');
     fetchBtn.disabled = true;
 
-    fetch(url).then(function (response) {
+    fetch(proxyInput.value.trim() + url).then(function (response) {
       if (!response.ok) throw new Error('Request failed: HTTP ' + response.status);
       streamingReader = response.body.getReader();
       streamingDecoder = new TextDecoder('utf-8');
@@ -935,7 +957,7 @@ document.addEventListener('DOMContentLoaded', function () {
     visualizationWorkbench.reset(COMMON_PREFIXES, 'loaded document');
     setStatus('Fetching …');
 
-    var fetcher = new window.ldfetch();
+    var fetcher = new window.ldfetch({ proxy: proxyInput.value.trim() });
     Object.keys(COMMON_PREFIXES).forEach(function (name) {
       fetcher.addPrefix(name, COMMON_PREFIXES[name]);
     });

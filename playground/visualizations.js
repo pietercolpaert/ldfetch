@@ -24,6 +24,12 @@ var LDES = 'https://w3id.org/ldes#';
 var TSS = 'https://w3id.org/tss#';
 var OM = 'http://www.ontology-of-units-of-measure.org/resource/om-2/';
 var IIIF = 'http://iiif.io/api/presentation/3#';
+// IIIF v3's own JSON-LD context aliases structural terms like "items" to
+// ActivityStreams (deliberately, for interoperability -- see
+// https://iiif.io/api/presentation/3/context.json) using ActivityStreams'
+// original "http" namespace IRI, not the "https" one AS elsewhere in this
+// file's COMMON_PREFIXES-style constants might suggest.
+var AS = 'http://www.w3.org/ns/activitystreams#';
 var RML = 'http://semweb.mmlab.be/ns/rml#';
 var RR = 'http://www.w3.org/ns/r2rml#';
 var SSSOM = 'https://w3id.org/sssom/';
@@ -109,6 +115,36 @@ DatasetIndex.prototype.values = function (entityOrTerm, predicates) {
     result = result.concat(entity.properties.get(predicate) || []);
   });
   return uniqueTerms(result);
+};
+
+// Walks an RDF list (rdf:first/rdf:rest, terminated by rdf:nil) starting
+// from its head term, returning its members in order. Used for any
+// "@container": "@list" JSON-LD property (IIIF's "items" among them) and
+// any vocabulary that models an ordered collection this way directly in
+// RDF (e.g. SHACL's sh:xone/sh:in, OWL's owl:unionOf).
+DatasetIndex.prototype.list = function (headTerm) {
+  var items = [];
+  var seen = {};
+  var current = headTerm;
+  while (current && current.value !== RDF + 'nil') {
+    var key = termKey(current);
+    if (seen[key]) break;
+    seen[key] = true;
+    var entity = this.entity(current);
+    if (!entity) break;
+    var first = this.values(entity, RDF + 'first')[0];
+    if (first) items.push(first);
+    current = this.values(entity, RDF + 'rest')[0];
+  }
+  return items;
+};
+
+// Like values(), but for a property whose value is the head of an RDF list
+// rather than repeated directly on the subject -- the shape "@container":
+// "@list" JSON-LD properties expand to.
+DatasetIndex.prototype.listValues = function (entityOrTerm, predicate) {
+  var head = this.values(entityOrTerm, predicate)[0];
+  return head ? this.list(head) : [];
 };
 
 DatasetIndex.prototype.hasType = function (entity, types) {
@@ -251,7 +287,16 @@ function mediaUrl(index, term) {
   if (!term) return '';
   var media = index.entity(term);
   var content = media && firstValue(index, media, [SCHEMA[0] + 'contentUrl', SCHEMA[1] + 'contentUrl', SCHEMA[0] + 'url', SCHEMA[1] + 'url']);
-  return safeUrl(content || term.value);
+  if (content) return safeUrl(content);
+  // Falling back to the term's own value only makes sense for a NamedNode
+  // (many resources -- IIIF annotation bodies especially -- use their own
+  // IRI as their content location, with no separate contentUrl/url
+  // property at all). A BlankNode's "value" is an opaque, parser-internal
+  // label, never a URI -- falling back to it here previously produced a
+  // bogus-but-syntactically-valid relative URL (resolved against the
+  // page's own address) for any blank-node value with no such property,
+  // e.g. a Web Annotation TextualBody comment.
+  return term.termType === 'NamedNode' ? safeUrl(term.value) : '';
 }
 
 function safeContactUrl(value) {
@@ -688,34 +733,84 @@ function statisticsModule() {
   };
 }
 
+// A canvas's "main" image is the one from its painting-motivated
+// annotation (https://iiif.io/api/presentation/3.0/#57-motivation, and the
+// IIIF-specific "painting" term registered alongside the Web Annotation
+// ones) -- other annotation pages on the same canvas (transcriptions,
+// tags, commentary, ...) can carry non-image bodies (e.g. a Web Annotation
+// TextualBody, always a blank node) that must not be picked up as if they
+// were the canvas's picture.
+var PAINTING_MOTIVATIONS = [IIIF + 'painting', OA + 'painting'];
+
 function iiifModule() {
-  var types = [IIIF + 'Manifest', IIIF + 'Canvas', IIIF + 'AnnotationPage', OA + 'Annotation'];
+  var types = [IIIF + 'Manifest', IIIF + 'Canvas', IIIF + 'Range', IIIF + 'AnnotationPage', OA + 'Annotation'];
   function resources(index) { return index.entitiesOfType(types); }
   function imageForCanvas(index, canvas) {
-    var pages = index.values(canvas, IIIF + 'items');
+    var pages = index.listValues(canvas, AS + 'items');
+    var fallback = null;
     for (var i = 0; i < pages.length; i++) {
       var page = index.entity(pages[i]);
-      var annotations = page ? index.values(page, IIIF + 'items') : [];
+      var annotations = page ? index.listValues(page, AS + 'items') : [];
       for (var j = 0; j < annotations.length; j++) {
         var annotation = index.entity(annotations[j]);
-        var bodies = annotation ? index.values(annotation, OA + 'hasBody') : [];
+        if (!annotation) continue;
+        var isPainting = index.values(annotation, OA + 'motivatedBy').some(function (m) { return PAINTING_MOTIVATIONS.indexOf(m.value) !== -1; });
+        var bodies = index.values(annotation, OA + 'hasBody');
         for (var k = 0; k < bodies.length; k++) {
-          var bodyEntity = index.entity(bodies[k]);
-          var candidate = bodyEntity ? firstValue(index, bodyEntity, [SCHEMA[0] + 'contentUrl', SCHEMA[1] + 'contentUrl']) : bodies[k].value;
-          if (safeUrl(candidate)) return { url: safeUrl(candidate), annotation: annotation };
+          var url = mediaUrl(index, bodies[k]);
+          if (!url) continue;
+          if (isPainting) return { url: url, annotation: annotation };
+          if (!fallback) fallback = { url: url, annotation: annotation };
         }
       }
     }
-    return null;
+    return fallback;
   }
+
+  // A Range (https://iiif.io/api/presentation/3.0/#54-range) groups canvases
+  // into a meaningful table of contents -- for a hinged polyptych like this
+  // one, typically one top-level Range per physical state (open/closed),
+  // each further broken down into wings and individual panels. Rendered as
+  // a tree, reusing taxonomyModule's own structure/styling, since it's the
+  // same "possibly deep, possibly cyclic tree of typed nodes" shape.
+  function ranges(index) { return index.entitiesOfType(IIIF + 'Range'); }
+  function rangeChildren(index, range) { return index.listValues(range, AS + 'items'); }
+  function rangeTreeHtml(index, range, seen, depth) {
+    var key = termKey(range.term);
+    if (seen[key]) return '<li>' + esc(index.label(range)) + ' <span class="warning-badge">cycle</span></li>';
+    if (depth > 10) return '<li>' + esc(index.label(range)) + ' …</li>';
+    var nextSeen = Object.assign({}, seen); nextSeen[key] = true;
+    var childrenHtml = rangeChildren(index, range).map(function (childTerm) {
+      var child = index.entity(childTerm);
+      if (child && index.hasType(child, IIIF + 'Range')) return rangeTreeHtml(index, child, nextSeen, depth + 1);
+      return '<li>' + termHtml(index, childTerm) + '</li>';
+    }).join('');
+    return '<li>' + termHtml(index, range.term) + (childrenHtml ? '<ul>' + childrenHtml + '</ul>' : '') + '</li>';
+  }
+  function structuresHtml(index) {
+    var found = ranges(index);
+    if (!found.length) return '';
+    var childKeys = {};
+    found.forEach(function (range) { rangeChildren(index, range).forEach(function (child) { childKeys[termKey(child)] = true; }); });
+    var roots = found.filter(function (range) { return !childKeys[termKey(range.term)]; });
+    if (!roots.length) roots = found;
+    return '<div class="iiif-structures"><h3>Structure</h3><div class="taxonomy"><ul>' + roots.map(function (r) { return rangeTreeHtml(index, r, {}, 0); }).join('') + '</ul></div></div>';
+  }
+
   return {
     id: 'iiif', title: 'IIIF Presentation', priority: 980,
     detect: function (index) { var found = resources(index); return { useful: found.length > 0, count: found.length }; },
     render: function (index) {
-      var canvases = index.entitiesOfType(IIIF + 'Canvas');
       var manifests = index.entitiesOfType(IIIF + 'Manifest');
+      // The manifest's own items list gives canvases in their true,
+      // authored order; entitiesOfType() falls back to whatever order the
+      // RDF happened to stream in when no manifest is in scope (e.g. a
+      // single canvas fetched on its own).
+      var orderedCanvases = manifests.length ? index.listValues(manifests[0], AS + 'items').map(function (term) { return index.entity(term); }).filter(function (entity) { return entity && index.hasType(entity, IIIF + 'Canvas'); }) : [];
+      var canvases = orderedCanvases.length ? orderedCanvases : index.entitiesOfType(IIIF + 'Canvas');
       var annotations = index.entitiesOfType(OA + 'Annotation');
       return '<div class="presentation-heading">' + (manifests.length ? manifests.map(function (manifest) { return '<h3>' + esc(index.label(manifest)) + '</h3>'; }).join('') : '<h3>IIIF presentation</h3>') + '<span>' + canvases.length + ' canvas' + (canvases.length === 1 ? '' : 'es') + '</span></div>' +
+        structuresHtml(index) +
         '<div class="canvas-strip">' + canvases.map(function (canvas, position) {
           var image = imageForCanvas(index, canvas);
           return '<figure' + selectAttr(canvas.term) + '><div class="canvas-image">' + (image ? '<img src="' + esc(image.url) + '" alt="' + esc(index.label(canvas)) + '" loading="lazy" referrerpolicy="no-referrer">' : '<div class="image-unavailable">No supported painting image found</div>') + '</div><figcaption><b>' + (position + 1) + '</b> ' + esc(index.label(canvas)) + (image && image.annotation ? '<span>1 loaded annotation</span>' : '') + '</figcaption></figure>';
@@ -727,7 +822,7 @@ function iiifModule() {
             (targets.length ? '<p><b>Target</b> ' + targets.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
             (bodies.length ? '<p><b>Body</b> ' + bodies.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
             (motivations.length ? '<p><b>Motivation</b> ' + motivations.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
-        }).join('') + '</div>' : '') + '<p class="view-note">Canvas order follows the order recoverable from loaded RDF. Original IIIF JSON array order requires a manifest-preserving adapter.</p>';
+        }).join('') + '</div>' : '') + '<p class="view-note">' + (orderedCanvases.length ? 'Canvas order follows the manifest’s own items list.' : 'Canvas order follows whatever order the loaded RDF happened to stream in -- no manifest is in the current scope to read the authored order from.') + '</p>';
     }
   };
 }

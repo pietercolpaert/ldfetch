@@ -1,0 +1,1136 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/anno.jsonld",
+    "https://iiif.io/api/presentation/3/context.json"
+  ],
+  "source": "https://raw.githubusercontent.com/VlaamseKunstcollectie/IIIF-metadata/master/Metadatahandboek/manifest_lam_gods.json",
+  "id": "",
+  "type": "Manifest",
+  "label": {
+    "en": [
+      "Lam gods (Hubert and Jan Van Eyck)"
+    ]
+  },
+  "metadata": [
+    {
+      "label": {
+        "en": [
+          "Artist"
+        ],
+        "nl": [
+          "Kunstenaar"
+        ]
+      },
+      "value": {
+        "en": [
+          "Jan Van Eyck"
+        ],
+        "nl": [
+          "Jan Van Eyck"
+        ]
+      }
+    },
+    {
+      "label": {
+        "en": [
+          "Date"
+        ],
+        "nl": [
+          "Datum"
+        ]
+      },
+      "value": {
+        "en": [
+          "1432"
+        ],
+        "nl": [
+          "1432"
+        ]
+      }
+    }
+  ],
+  "requiredStatement": {
+    "label": {
+      "nl": [
+        "Rechten"
+      ]
+    },
+    "value": {
+      "nl": [
+        "De afbeeldingen in deze IIIF-proefopstelling werden ter beschikking gesteld door Meemoo. De door Meemoo opgelegde gebruikslicentie voor het Lam Gods van de gebroeders Van Eyck is 'CC-BY-NC-ND 4.0.' De gepaste bronvermelding is ’Collectie Sint-Baafskathedraal Gent - www.artinflanders.be - fotograaf Hugo Maertens’. Het betreft hier afbeeldingen van voor de jongste restauratie. Wanneer u afbeeldingen wilt bestellen van na deze restauratie, dan kunt u deze opvragen via https://artinflanders.be. "
+      ]
+    }
+  },
+  "items": [
+    {
+      "id": "canvas/p1",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Lam Gods, open"
+        ]
+      },
+      "height": 2456,
+      "width": 3508,
+      "thumbnail": [
+        {
+          "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F59.tif/full/full/0/default.jpg",
+          "type": "Image",
+          "format": "image/jpeg",
+          "service": [
+            {
+              "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F59.tif",
+              "type": "ImageService2",
+              "profile": "level1"
+            }
+          ],
+          "width": 300,
+          "height": 200
+        }
+      ],
+      "items": [
+        {
+          "id": "page/p1/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0001-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F59.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 2456,
+                "width": 3508,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F59.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p1"
+            }
+          ]
+        }
+      ],
+      "annotations": [
+        {
+          "id": "annotationPage/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotationPage/1/2",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Het offer van Kaïn en Abel"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Het offer van Kaïn en Abel",
+                "format": "text/html"
+              },
+              "target": "canvas/p1#xywh=215,180,260,230"
+            },
+            {
+              "id": "annotationPage/1/3",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Adam"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Adam",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=215,410,260,1025"
+            },
+            {
+              "id": "annotationPage/1/4",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Zingende Engelen"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Zingende Engelen",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=480,435,510,1000"
+            },
+            {
+              "id": "annotationPage/1/5",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Rechtvaardige Rechters"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Rechtvaardige Rechters",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=215,1435,375,925"
+            },
+            {
+              "id": "annotationPage/1/6",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Ridders van Christus"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Ridders van Christus",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=590,1435,390,925"
+            },
+            {
+              "id": "annotationPage/1/7",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Maria"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Maria",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=1000,375,500,1060"
+            },
+            {
+              "id": "annotationPage/1/8",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "God op de Troon"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "God op de Troon",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=1500,125,510,1310"
+            },
+            {
+              "id": "annotationPage/1/9",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Johannes De Doper"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Johannes De Doper",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=2010,375,510,1060"
+            },
+            {
+              "id": "annotationPage/1/10",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "De aanbidding van het Lam"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "De aanbidding van het Lam",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=1000,1460,1520,925"
+            },
+            {
+              "id": "annotationPage/1/11",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Musicerende Engelen"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Musicerende Engelen",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=2530,435,510,1000"
+            },
+            {
+              "id": "annotationPage/1/12",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "De moord op Kaïn en Abel"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "De moord op Kaïn en Abel",
+                "format": "text/html"
+              },
+              "target": "canvas/p1#xywh=3040,180,260,230"
+            },
+            {
+              "id": "annotationPage/1/13",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "Eva"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "Eva",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=3040,410,260,1025"
+            },
+            {
+              "id": "annotationPage/1/14",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "De Kluizenaars"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "De Kluizenaars",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=2535,1450,375,910"
+            },
+            {
+              "id": "annotationPage/1/15",
+              "type": "Annotation",
+              "motivation": "tagging",
+              "label": {
+                "en": [
+                  "De Pelgrims op Bedevaart"
+                ]
+              },
+              "body": {
+                "type": "TextualBody",
+                "value": "De Pelgrims op Bedevaart",
+                "format": "text/plain"
+              },
+              "target": "canvas/p1#xywh=2910,1450,390,910"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p2",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Het offer van Kain en Abel"
+        ]
+      },
+      "height": 3508,
+      "width": 2427,
+      "items": [
+        {
+          "id": "page/p2/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0002-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F60.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3508,
+                "width": 2427,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F60.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p3",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Adam"
+        ]
+      },
+      "height": 3507,
+      "width": 880,
+      "items": [
+        {
+          "id": "page/p3/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0003-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F58.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3507,
+                "width": 880,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F58.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p4",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Zingende Engelen"
+        ]
+      },
+      "height": 3488,
+      "width": 1783,
+      "items": [
+        {
+          "id": "page/p4/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0004-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F62.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3488,
+                "width": 1783,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F62.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p5",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Rechtvaardige Rechters"
+        ]
+      },
+      "height": 3509,
+      "width": 1478,
+      "items": [
+        {
+          "id": "page/p5/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0005-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F68.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3509,
+                "width": 1478,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F68.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p6",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Ridders van Christus"
+        ]
+      },
+      "height": 3507,
+      "width": 1461,
+      "items": [
+        {
+          "id": "page/p6/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0006-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F69.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3507,
+                "width": 1461,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F69.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p7",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Maria"
+        ]
+      },
+      "height": 3507,
+      "width": 1673,
+      "items": [
+        {
+          "id": "page/p7/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0007-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F63.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3507,
+                "width": 1673,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F63.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p8",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "God op de troon"
+        ]
+      },
+      "height": 3419,
+      "width": 1339,
+      "items": [
+        {
+          "id": "page/p8/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0008-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F64.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3419,
+                "width": 1339,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F64.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p8"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p9",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Johannes de Doper"
+        ]
+      },
+      "height": 3507,
+      "width": 1711,
+      "items": [
+        {
+          "id": "page/p9/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0009-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F65.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3507,
+                "width": 1711,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F65.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p10",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "De aanbidding van het Lam"
+        ]
+      },
+      "height": 2228,
+      "width": 3508,
+      "items": [
+        {
+          "id": "page/p10/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0010-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F70.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 2228,
+                "width": 3508,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F70.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p11",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Musicerende Engelen"
+        ]
+      },
+      "height": 3508,
+      "width": 1775,
+      "items": [
+        {
+          "id": "page/p11/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0011-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F66.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3508,
+                "width": 1775,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F66.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p11"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p12",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "De moord op Kaïn en Abel"
+        ]
+      },
+      "height": 3508,
+      "width": 2427,
+      "items": [
+        {
+          "id": "page/p12/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0012-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F61.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3508,
+                "width": 2427,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F61.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p12"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p13",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Eva"
+        ]
+      },
+      "height": 3508,
+      "width": 893,
+      "items": [
+        {
+          "id": "page/p13/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0013-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F67.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3508,
+                "width": 893,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F67.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p13"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p14",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "De Kluizenaars"
+        ]
+      },
+      "height": 3507,
+      "width": 1517,
+      "items": [
+        {
+          "id": "page/p14/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0014-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F71.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3507,
+                "width": 1517,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F71.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p14"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p15",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "De Pelgrims op Bedevaart"
+        ]
+      },
+      "height": 3508,
+      "width": 1434,
+      "items": [
+        {
+          "id": "page/p15/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0015-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F72.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3508,
+                "width": 1434,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F72.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p15"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "canvas/p16",
+      "type": "Canvas",
+      "label": {
+        "en": [
+          "Lam gods, gesloten"
+        ]
+      },
+      "height": 3508,
+      "width": 2456,
+      "items": [
+        {
+          "id": "page/p16/1",
+          "type": "AnnotationPage",
+          "items": [
+            {
+              "id": "annotation/p0016-image",
+              "type": "Annotation",
+              "motivation": "painting",
+              "body": {
+                "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F57.tif/full/full/0/default.jpg",
+                "type": "Image",
+                "format": "image/jpeg",
+                "height": 3508,
+                "width": 2456,
+                "service": [
+                  {
+                    "id": "https://imagehub.vlaamsekunstcollectie.be/iiif/2/public%2F57.tif",
+                    "type": "ImageService2",
+                    "profile": "level1"
+                  }
+                ]
+              },
+              "target": "canvas/p16"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "structures": [
+    {
+      "id": "range/r1",
+      "type": "Range",
+      "label": {
+        "en": [
+          "Open"
+        ]
+      },
+      "items": [
+        {
+          "id": "range/r1/1",
+          "type": "Range",
+          "label": {
+            "en": [
+              "Volledig"
+            ]
+          },
+          "items": [
+            {
+              "id": "canvas/p1",
+              "type": "Canvas"
+            }
+          ]
+        },
+        {
+          "id": "range/r1/2",
+          "type": "Range",
+          "label": {
+            "en": [
+              "Links"
+            ]
+          },
+          "items": [
+            {
+              "id": "range/r1/2/1",
+              "type": "Range",
+              "label": {
+                "en": [
+                  "Het offer van Kaïn en Abel"
+                ]
+              },
+              "items": [
+                {
+                  "id": "canvas/p2",
+                  "type": "Canvas"
+                }
+              ]
+            },
+            {
+              "id": "range/r1/2/2",
+              "type": "Range",
+              "label": {
+                "en": [
+                  "Adam"
+                ]
+              },
+              "items": [
+                {
+                  "id": "canvas/p3",
+                  "type": "Canvas"
+                }
+              ]
+            },
+            {
+              "id": "range/r1/2/3",
+              "type": "Range",
+              "label": {
+                "en": [
+                  "Zingende Engelen"
+                ]
+              },
+              "items": [
+                {
+                  "id": "canvas/p4",
+                  "type": "Canvas"
+                }
+              ]
+            },
+            {
+              "id": "range/r1/2/4",
+              "type": "Range",
+              "label": {
+                "en": [
+                  "Rechtvaardige rechters"
+                ]
+              },
+              "items": [
+                {
+                  "id": "canvas/p5",
+                  "type": "Canvas"
+                }
+              ]
+            },
+            {
+              "id": "range/r1/2/5",
+              "type": "Range",
+              "label": {
+                "en": [
+                  "Ridders van Christus"
+                ]
+              },
+              "items": [
+                {
+                  "id": "canvas/p6",
+                  "type": "Canvas"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "range/r1/3",
+          "type": "Range",
+          "label": {
+            "en": [
+              "Centraal"
+            ]
+          },
+          "items": [
+            {
+              "id": "canvas/p7",
+              "type": "Canvas"
+            },
+            {
+              "id": "canvas/p8",
+              "type": "Canvas"
+            },
+            {
+              "id": "canvas/p9",
+              "type": "Canvas"
+            },
+            {
+              "id": "canvas/p10",
+              "type": "Canvas"
+            }
+          ]
+        },
+        {
+          "id": "range/r1/4",
+          "type": "Range",
+          "label": {
+            "en": [
+              "Rechts"
+            ]
+          },
+          "items": [
+            {
+              "id": "canvas/p11",
+              "type": "Canvas"
+            },
+            {
+              "id": "canvas/p12",
+              "type": "Canvas"
+            },
+            {
+              "id": "canvas/p13",
+              "type": "Canvas"
+            },
+            {
+              "id": "canvas/p14",
+              "type": "Canvas"
+            },
+            {
+              "id": "canvas/p15",
+              "type": "Canvas"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "range/r2",
+      "type": "Range",
+      "label": {
+        "en": [
+          "Gesloten"
+        ]
+      },
+      "items": [
+        {
+          "id": "range/r2/1",
+          "type": "Range",
+          "label": {
+            "en": [
+              "Volledig"
+            ]
+          },
+          "items": [
+            {
+              "id": "canvas/p16",
+              "type": "Canvas"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

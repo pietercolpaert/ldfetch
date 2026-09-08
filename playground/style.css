@@ -259,6 +259,27 @@ a:hover {
   padding: 0.8rem 0.25rem 0;
 }
 
+.proxy-field {
+  flex: 1;
+  min-width: 16rem;
+}
+
+.proxy-field input {
+  width: 100%;
+  border: 1px solid #bfcce0;
+  border-radius: 6px;
+  background: white;
+  color: var(--text);
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+}
+
+.proxy-field small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+}
+
 .format-field {
   flex: 0 0 12rem;
 }
@@ -741,6 +762,8 @@ button {
 .presentation-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .presentation-heading h3 { margin-top: 0; color: var(--primary); }
 .presentation-heading span { color: #647180; font-size: 0.78rem; }
+.iiif-structures { margin: 0.6rem 0 1rem; }
+.iiif-structures h3 { margin: 0 0 0.4rem; color: var(--primary); }
 .canvas-strip {
   display: grid;
   grid-auto-flow: column;
@@ -934,6 +957,11 @@ button {
 
   .format-field {
     max-width: none;
+  }
+
+  .proxy-field {
+    min-width: 0;
+    margin-bottom: 0.8rem;
   }
 
   .viewer-heading { align-items: stretch; flex-direction: column; }

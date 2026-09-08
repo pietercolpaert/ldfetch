@@ -61,6 +61,9 @@
           <section><h3>Identity</h3>
             <button type="button" class="example-chip" data-example="orcid-researcher">ORCID researcher</button>
           </section>
+          <section><h3>Digitised collections</h3>
+            <button type="button" class="example-chip" data-example="iiif-lam-gods">Ghent Altarpiece (IIIF)</button>
+          </section>
           <section><h3>Life sciences</h3>
             <button type="button" class="example-chip" data-example="uniprot-protein">UniProt protein</button>
             <button type="button" class="example-chip" data-example="fhir-patient">FHIR Patient (RDF)</button>
@@ -92,6 +95,14 @@
   <details id="advanced" class="advanced">
     <summary>Advanced</summary>
     <div class="advanced-options">
+      <div class="field proxy-field">
+        <label for="proxy-url">Proxy URL</label>
+        <input id="proxy-url" type="url" spellcheck="false" autocomplete="off"
+               value="https://proxy.linkeddatafragments.org/"
+               placeholder="https://proxy.example/">
+        <small>The document URL is appended directly to this URL. Clear it to connect directly.</small>
+      </div>
+
       <div class="field format-field">
         <label for="output-format">Output format</label>
         <select id="output-format">
