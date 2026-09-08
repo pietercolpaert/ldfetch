@@ -182,7 +182,7 @@ function blankNodeId(term) {
 }
 
 function selectAttr(term, name) {
-  return term && term.termType === 'NamedNode' ? ' ' + (name || 'data-select-entity') + '="' + esc(termKey(term)) + '"' : '';
+  return term && term.termType === 'NamedNode' ? ' ' + (name || 'data-select-entity') + '="' + esc(termKey(term)) + '" title="' + esc(term.value) + '"' : '';
 }
 
 function blankNodeHtml(index, term, depth, seen) {
@@ -270,7 +270,13 @@ function detailsHtml(index, entity) {
   });
   var entityUrl = entity.term.termType === 'NamedNode' ? safeUrl(entity.term.value) : '';
   return '<div class="entity-heading"><h3>' + esc(index.label(entity)) + '</h3>' +
-    (entityUrl ? '<a href="' + esc(entityUrl) + '" target="_blank" rel="noopener">' + esc(entity.term.value) + '</a>' : '<span class="entity-identifier">' + esc(entity.term.value) + '</span>') + '</div>' +
+    (entityUrl ?
+      '<a href="' + esc(entityUrl) + '" target="_blank" rel="noopener">' + esc(entity.term.value) + '</a>' +
+      // Same data-load-url mechanism the hypermedia controls view uses to
+      // follow a TREE/Hydra link: replaces the currently loaded source with
+      // this named node, in place, rather than opening a new tab.
+      ' <button type="button" class="action-button secondary" data-load-url="' + esc(entityUrl) + '">Follow named node</button>'
+      : '<span class="entity-identifier">' + esc(entity.term.value) + '</span>') + '</div>' +
     '<div class="table-scroll"><table class="details-table"><tbody>' + rows.join('') + '</tbody></table></div>';
 }
 
@@ -1018,7 +1024,7 @@ function createWorkbench(root, options) {
       } else body.innerHTML = html;
       if (active.module.id === 'map' && !retainedGlobe) {
         var removeMap = geospatial.mount(body.querySelector('[data-globe]'), state.mapData, function (entity) {
-          state.entity = entity; updateInspector(); notify();
+          selectEntity(entity);
         }, state.camera, function (camera) { state.camera = camera; notify(); });
         unmount = removeMap;
         unmount.update = removeMap.update;
@@ -1037,6 +1043,21 @@ function createWorkbench(root, options) {
     var selectedEntity = index.entity(state.entity);
     root.querySelector('[data-entity-details]').innerHTML = detailsHtml(index, selectedEntity);
     root.querySelector('[data-entity-inspector]').open = !!selectedEntity;
+  }
+
+  // Used specifically in response to a user clicking a named node (an
+  // inline entity link, a card, a map pin, ...): shows its details and
+  // brings the inspector on screen, so a click always has a visible effect
+  // even when the panel starts out scrolled out of view. Programmatic
+  // selection (restoring a shared #entity=... link, the initial render)
+  // goes through plain updateInspector() instead, which doesn't move the
+  // page around on its own.
+  function selectEntity(entityKey) {
+    state.entity = entityKey;
+    updateInspector();
+    notify();
+    var inspector = root.querySelector('[data-entity-inspector]');
+    if (inspector) inspector.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function applyGraphScope() {
@@ -1106,9 +1127,8 @@ function createWorkbench(root, options) {
     if (entityTarget) {
       var entityKey = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
       if (!entityKey || entityKey.indexOf('NamedNode|') !== 0) return;
-      state.entity = entityKey;
       if (entityTarget.dataset.geometryId !== undefined && unmount && unmount.focus) unmount.focus(entityTarget.dataset.geometryId);
-      updateInspector(); notify();
+      selectEntity(entityKey);
     }
   });
 

@@ -138,17 +138,17 @@ var EXAMPLES = {
   },
   // An EU Framework Programmes codelist (Euraxess, the EU's researcher-
   // mobility portal), published by Charles University and catalogued on
-  // data.europa.eu. In N-Quads (one named graph per statement) rather than
-  // TriG, for variety, and -- like the Infrabel example above -- one of the
-  // few data.europa.eu-hosted sources found with CORS enabled.
+  // data.europa.eu -- a SKOS taxonomy (ConceptScheme), in N-Quads (one
+  // named graph per statement) rather than TriG, for variety. Also one of
+  // the few data.europa.eu-hosted sources found with CORS enabled.
   'euraxess-nquads': {
     url: 'https://data.mff.cuni.cz/soubory/%C4%8D%C3%ADseln%C3%ADky/euraxess-programy-eu.nq'
   },
   // Library of Congress's linked-data service for subject/name authorities
-  // -- one of the most widely reused cultural-heritage vocabulary hubs on
-  // the web, and one of the few classic "plain dereferenceable URI" Linked
-  // Data sites (as opposed to a modern JSON API) found to actually enable
-  // CORS.
+  // -- part of one of the most widely reused controlled-vocabulary/taxonomy
+  // hubs on the web, and one of the few classic "plain dereferenceable URI"
+  // Linked Data sites (as opposed to a modern JSON API) found to actually
+  // enable CORS.
   'loc-subject': {
     url: 'https://id.loc.gov/authorities/subjects/sh85118553.rdf'
   },
@@ -158,12 +158,11 @@ var EXAMPLES = {
   'geonames-paris': {
     url: 'https://sws.geonames.org/2988507/about.rdf'
   },
-  // ORCID's own official fictitious demo researcher, "Josiah Carberry" -- a
-  // running joke used by ORCID/CrossRef since 1929 for exactly this kind of
-  // demonstration. Needs a real Accept header (a bare `*/*` gets a 406 from
-  // ORCID's server), which ldfetch always sends.
+  // Pieter Colpaert's own ORCID researcher identity record. Needs a real
+  // Accept header (a bare `*/*` gets a 406 from ORCID's server), which
+  // ldfetch always sends.
   'orcid-researcher': {
-    url: 'https://pub.orcid.org/experimental_rdf_v1/0000-0002-1825-0097'
+    url: 'https://pub.orcid.org/experimental_rdf_v1/0000-0001-6917-2167'
   },
   // UniProt's own Linked Data core ontology (`up:`), describing protein
   // entry P12345 (a reviewed malate dehydrogenase) -- one of the largest
