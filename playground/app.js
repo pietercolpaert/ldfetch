@@ -2,6 +2,7 @@
 
 var rdfWriter = require('rdf-writer-ts');
 var rdfParserTs = require('rdf-parser-ts');
+var rdfJsJelly = require('rdfjs-jelly');
 var visualizations = require('./visualizations');
 
 // Register common vocabularies up front so pretty RDF output can use compact
@@ -110,14 +111,8 @@ var EXAMPLES = {
     // page's own location rather than using a bare relative path.
     url: new URL('examples/sensor-readings.trig', document.baseURI).href
   },
-  // Too large (multi-GB) to ever fully buffer, and the S3 endpoint's CORS
-  // preflight rejects a Range header, so this one is handled by a separate,
-  // manual streaming path (see startStreamingExample) rather than a normal
-  // fetcher.get() call: one long-lived GET, paused every WINDOW_SIZE
-  // messages by simply not reading further, resumed on "Load next" click.
   'rdf-messages-large': {
-    url: 'https://ugent-lib-opendata-prd.s3.ugent.be/alma-rdf/rdf-messages.20260404.nt',
-    streaming: true
+    url: 'https://ugent-lib-opendata-prd.s3.ugent.be/alma-rdf/rdf-messages.20260404.nt'
   },
   // Avoids shaclcjs's list-compiling code path (property paths with "|",
   // for example), which throws in a strict-mode bundle: shaclc-parse@2.0.0
@@ -285,12 +280,9 @@ document.addEventListener('DOMContentLoaded', function () {
   // lookahead buffer of whatever streams in past that. "Load next" swaps in
   // the next window and drops the old one and everything before it, so at
   // most ~2 windows' worth of messages are ever referenced at once -- for
-  // Jelly-RDF, which streams messages progressively as it parses, that's a
-  // real memory bound. rdf-parser-ts's Turtle/TriG "-messages" mode can only
-  // report message boundaries (including empty ones) once the whole
-  // document has been parsed, so for that format family this still bounds
-  // what the playground itself renders/retains, but not what the parser
-  // buffers internally while it runs.
+  // Jelly-RDF and rdf-parser-ts's text formats, messages stream progressively,
+  // so this is a real memory bound apart from a parser/network chunk's small
+  // lookahead beyond the visible window.
   var WINDOW_SIZE = 1000;
   var currentMessages = [];
   var pendingMessages = [];
@@ -298,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var fetchComplete = false;
   loadMoreMessagesBtn.textContent = 'Load next ' + WINDOW_SIZE;
 
-  // Manual streaming session state for the one example too large to ever
+  // Manual streaming session state for examples too large to ever
   // fully buffer (see startStreamingExample). streamingReader is non-null
   // exactly while there's a live, not-yet-exhausted response stream to
   // resume from.
@@ -308,6 +300,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var streamingDone = false;
   var streamingBuilding = [];
   var streamingCounter = null;
+  var streamingKind = 'text';
+  var streamingMultipleMessages = false;
+  var streamingUrl = '';
 
   var outputCm = CodeMirror(document.getElementById('output-editor'), {
     mode: 'text/turtle',
@@ -589,7 +584,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Restore a message selected in a shared URL once its retained window is
-  // available. The very large streaming example deliberately does not fetch
+  // available. Very large streaming sources deliberately do not fetch
   // ahead without a user action merely to satisfy a distant hash position.
   function restoreMessageSelection () {
     if (restoredMessagePosition === null || !currentMessages.length) return false;
@@ -631,6 +626,9 @@ document.addEventListener('DOMContentLoaded', function () {
     streamingDone = false;
     streamingBuilding = [];
     streamingCounter = null;
+    streamingKind = 'text';
+    streamingMultipleMessages = false;
+    streamingUrl = '';
   }
 
   // Resets all message-window state for a new fetch.
@@ -655,12 +653,15 @@ document.addEventListener('DOMContentLoaded', function () {
   function receiveMessage (quadsInMessage) {
     if (currentMessages.length < WINDOW_SIZE) {
       currentMessages.push(quadsInMessage);
-      messagesPanel.hidden = false;
       messageSlider.max = String(currentMessages.length - 1);
-      if (currentMessages.length === 1) {
+      if (streamingMultipleMessages || currentMessages.length > 1) {
+        streamingMultipleMessages = true;
+        messagesPanel.hidden = false;
+      }
+      if (!messagesPanel.hidden && currentMessages.length === 1) {
         renderMessage(0);
         messageCm.refresh();
-      } else {
+      } else if (!messagesPanel.hidden) {
         scheduleMessageRender();
       }
     } else {
@@ -694,12 +695,25 @@ document.addEventListener('DOMContentLoaded', function () {
   // real-world log of non-empty library records; worth knowing about for
   // other sources.
   function handleStreamingItem (item) {
-    if (!(item && item.quad && typeof item.messageCounter === 'number')) return;
+    // Ordinary RDF quads are provisionally accumulated as one dataset. A
+    // parser-recognized message log instead wraps each quad with its counter.
+    // Both therefore share the same single-message fallback without forcing
+    // message mode (which would unnecessarily change blank-node identifiers).
+    if (!(item && item.quad && typeof item.messageCounter === 'number')) {
+      if (item && item.termType === 'Quad') streamingBuilding.push(item);
+      return;
+    }
     if (streamingCounter === null) {
       streamingCounter = item.messageCounter;
     } else if (item.messageCounter !== streamingCounter) {
       receiveMessage(streamingBuilding);
       streamingBuilding = [];
+      streamingMultipleMessages = true;
+      messagesPanel.hidden = false;
+      if (currentMessages.length === 1) {
+        renderMessage(0);
+        messageCm.refresh();
+      }
       streamingCounter = item.messageCounter;
     }
     streamingBuilding.push(item.quad);
@@ -710,8 +724,8 @@ document.addEventListener('DOMContentLoaded', function () {
   // long-lived GET whose body we stop reading from once there's enough,
   // and resume later -- until WINDOW_SIZE more messages have arrived (or
   // the stream ends), then stops (pauses) again.
-  function pumpStreamingMessages () {
-    var targetCount = windowStartIndex + currentMessages.length + pendingMessages.length + WINDOW_SIZE;
+  function pumpStreamingMessages (targetCount) {
+    if (targetCount === undefined) targetCount = windowStartIndex + currentMessages.length + pendingMessages.length + WINDOW_SIZE;
 
     function step () {
       if (windowStartIndex + currentMessages.length + pendingMessages.length >= targetCount) {
@@ -720,18 +734,22 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!streamingReader) return Promise.resolve();
       return streamingReader.read().then(function (result) {
         if (result.done) {
-          var tailText = streamingDecoder.decode();
-          if (tailText) streamingParser.write(tailText).forEach(handleStreamingItem);
-          streamingParser.end().forEach(handleStreamingItem);
-          if (streamingBuilding.length) {
-            receiveMessage(streamingBuilding);
-            streamingBuilding = [];
+          if (streamingKind === 'text') {
+            var tailText = streamingDecoder.decode();
+            if (tailText) streamingParser.write(tailText).forEach(handleStreamingItem);
+            streamingParser.end().forEach(handleStreamingItem);
+            if (streamingBuilding.length) {
+              receiveMessage(streamingBuilding);
+              streamingBuilding = [];
+            }
           }
           streamingDone = true;
           streamingReader = null;
           return;
         }
-        streamingParser.write(streamingDecoder.decode(result.value, { stream: true })).forEach(handleStreamingItem);
+        if (streamingKind === 'text') {
+          streamingParser.write(streamingDecoder.decode(result.value, { stream: true })).forEach(handleStreamingItem);
+        }
         return step();
       });
     }
@@ -739,21 +757,26 @@ document.addEventListener('DOMContentLoaded', function () {
     return step();
   }
 
-  function continueStreaming () {
+  function continueStreaming (targetCount) {
     setStatus('Fetching … (streaming, will pause again after ' + WINDOW_SIZE + ' more messages)');
-    return pumpStreamingMessages().then(function () {
+    return pumpStreamingMessages(targetCount).then(function () {
       fetchComplete = streamingDone;
       updateLoadMoreVisibility();
-      if (currentMessages.length && !restoreMessageSelection()) renderMessage(parseInt(messageSlider.value, 10));
+      if (streamingMultipleMessages && currentMessages.length && !restoreMessageSelection()) renderMessage(parseInt(messageSlider.value, 10));
       var total = windowStartIndex + currentMessages.length + pendingMessages.length;
       if (streamingDone) {
-        setStatus('Done: reached the end of the stream, ' + total + ' messages total.');
+        if (!streamingMultipleMessages && total <= 1) {
+          return Promise.resolve(renderSingleStreamingMessage(total ? currentMessages[0] : [], streamingUrl)).then(function () {
+            fetchBtn.disabled = false;
+          });
+        }
+        setStatus('Done: reached the end of the stream, ' + total + ' messages total from ' + streamingUrl);
       } else {
         // A single network chunk can hold more than WINDOW_SIZE messages,
         // and a chunk can't be consumed partway through, so "buffered so
         // far" can overshoot the round WINDOW_SIZE step -- the window
         // shown on screen stays capped at WINDOW_SIZE regardless.
-        setStatus('Paused: ' + total + ' messages fetched so far (' + WINDOW_SIZE + ' shown at a time) -- click "Load next ' + WINDOW_SIZE + '" to keep streaming.');
+        setStatus('Paused: ' + total + ' messages fetched so far (' + WINDOW_SIZE + ' shown at a time) from ' + streamingUrl + ' -- click "Load next ' + WINDOW_SIZE + '" to keep streaming.');
       }
       fetchBtn.disabled = false;
     }).catch(function (error) {
@@ -762,33 +785,95 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // Entry point for the one example too large to fetch normally: raw
+  // A stream with zero or one RDF Message is indistinguishable in the UI
+  // from an ordinary RDF document. Only reveal message navigation after a
+  // second message is observed; otherwise render that sole dataset normally.
+  function renderSingleStreamingMessage (quads, url) {
+    messagesPanel.hidden = true;
+    messageOutputPanel.hidden = true;
+    outputPanel.hidden = false;
+    visualizationWorkbench.complete(quads, outputPrefixes, 'loaded document');
+    codeJsEl.textContent = jsSnippet(url, null, false);
+    codeCliEl.textContent = cliSnippet(url, null, outputFormat.value);
+    if (outputFormat.value !== 'jsonld') {
+      var writer = new rdfWriter.Writer({
+        format: OUTPUT_FORMATS[outputFormat.value].writerFormat,
+        prefixes: outputPrefixes
+      });
+      writer.addQuads(quads);
+      writer.end(function (error, result) {
+        if (error) throw error;
+        outputCm.setValue(result);
+      });
+      setStatus('Done: ' + quads.length + ' triple' + (quads.length === 1 ? '' : 's') + ' from ' + url);
+      return;
+    }
+    setStatus(frameToggle.checked ? 'Framing …' : 'Rendering JSON-LD …');
+    var converter = new window.ldfetch();
+    var conversion = frameToggle.checked
+      ? converter.frame(quads, JSON.parse(frameCm.getValue()))
+      : converter.frame(quads, { '@graph': {} });
+    return conversion.then(function (jsonLd) {
+      outputCm.setValue(JSON.stringify(jsonLd, null, 2));
+      setStatus('Done: ' + quads.length + ' triple' + (quads.length === 1 ? '' : 's') + ' from ' + url);
+    });
+  }
+
+  // Entry point for examples too large to fetch normally: raw
   // fetch() (a plain GET, so no CORS-preflight-triggering headers), parsed
   // incrementally with rdf-parser-ts's IncrementalParser as chunks arrive,
   // rather than lib/ldfetch.js's usual buffer-the-whole-response approach.
-  function startStreamingExample (url) {
+  function startStreamingExample (url, options) {
+    options = options || { format: 'text/turtle' };
     resetMessages();
     visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
+    outputCm.setValue('');
     outputPanel.hidden = true;
     renderPrefixes({});
     setStatus('Connecting …');
     fetchBtn.disabled = true;
+    streamingUrl = url;
 
-    fetch((proxyToggle.checked ? proxyInput.value.trim() : '') + url).then(function (response) {
+    var proxy = proxyToggle.checked ? proxyInput.value.trim() : '';
+    var requestOptions = proxy ? { headers: { Accept: PROXY_ACCEPT } } : undefined;
+    fetch(proxy + url, requestOptions).then(function (response) {
       if (!response.ok) throw new Error('Request failed: HTTP ' + response.status);
-      streamingReader = response.body.getReader();
-      streamingDecoder = new TextDecoder('utf-8');
+      var contentType = response.headers.get('content-type') || '';
+      var declaredFormat = contentType.split(';')[0].trim().toLowerCase();
+      if (['text/turtle', 'application/trig', 'application/n-triples', 'application/n-quads', 'text/n3', 'application/x-jelly-rdf'].includes(declaredFormat)) {
+        options.format = declaredFormat;
+      }
+      var versionMatch = contentType.match(/(?:^|;)\s*version\s*=\s*(?:"([^"]+)"|([^;\s]+))/i);
+      if (versionMatch) options.version = versionMatch[1] || versionMatch[2];
+      var body = response.body;
+      if (options.compression === 'gzip') {
+        if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot stream gzip-compressed files.');
+        body = body.pipeThrough(new DecompressionStream('gzip'));
+      }
       var documentPrefixes = Object.create(null);
-      streamingParser = new rdfParserTs.IncrementalParser({ baseIRI: url, format: 'text/turtle' }, {
-        prefix: function (prefix, iri) {
+      function addPrefix (prefix, iri) {
           var value = (iri && iri.value !== undefined) ? iri.value : iri;
           if (documentPrefixes[prefix] !== value) {
             documentPrefixes[prefix] = value;
             renderPrefixes(documentPrefixes);
           }
-        }
-      });
-      codeJsEl.textContent = streamingJsSnippet(url);
+      }
+      if (options.format === 'application/x-jelly-rdf') {
+        streamingKind = 'jelly';
+        streamingParser = new rdfJsJelly.StreamParser();
+        streamingParser.on('namespace', addPrefix);
+        streamingParser.on('message', function (message) {
+          if (currentMessages.length || pendingMessages.length) streamingMultipleMessages = true;
+          receiveMessage(message);
+        });
+        streamingReader = streamingParser.import(body).getReader();
+      } else {
+        streamingKind = 'text';
+        streamingReader = body.getReader();
+        streamingDecoder = new TextDecoder('utf-8');
+        streamingParser = new rdfParserTs.IncrementalParser({ baseIRI: url, format: options.format, version: options.version }, { prefix: addPrefix });
+      }
+      codeJsEl.textContent = streamingJsSnippet(url, options);
       codeCliEl.textContent = cliSnippet(url, null);
       return continueStreaming();
     }).catch(function (error) {
@@ -885,14 +970,34 @@ document.addEventListener('DOMContentLoaded', function () {
   // simply not asked to read further once you have enough -- backpressure,
   // not cancellation. On Node, replace response.body with a
   // fs.createReadStream()/http response and iterate its chunks the same way.
-  function streamingJsSnippet(url) {
+  function streamingJsSnippet(url, options) {
+    var decompression = options && options.compression === 'gzip'
+      ? ".pipeThrough(new DecompressionStream('gzip'))"
+      : '';
+    var format = (options && options.format) || 'text/turtle';
+    if (format === 'application/x-jelly-rdf') {
+      return [
+        "const { StreamParser } = require('rdfjs-jelly');",
+        '',
+        "const response = await fetch('" + url + "');",
+        'const parser = new StreamParser();',
+        "parser.on('message', quads => console.log(quads));",
+        'const reader = parser.import(response.body' + decompression + ').getReader();',
+        '',
+        '// Stop reading to apply backpressure; resume for the next window.',
+        'while (true) {',
+        '  const { done } = await reader.read();',
+        '  if (done) break;',
+        '}'
+      ].join('\n');
+    }
     return [
       "const { IncrementalParser, isMessageQuad } = require('rdf-parser-ts');",
       '',
       "const response = await fetch('" + url + "');",
-      'const reader = response.body.getReader();',
+      'const reader = response.body' + decompression + '.getReader();',
       "const decoder = new TextDecoder('utf-8');",
-      "const parser = new IncrementalParser({ baseIRI: '" + url + "', format: 'text/turtle' });",
+      "const parser = new IncrementalParser({ baseIRI: '" + url + "', format: '" + format + "' });",
       '',
       '// Stop calling reader.read() once you have enough -- the connection just',
       '// sits there, paused, until you call it again for more. Each read() can',
@@ -933,14 +1038,31 @@ document.addEventListener('DOMContentLoaded', function () {
     statusEl.classList.toggle('error', !!isError);
   }
 
-  // URLs that need the special streaming/backpressure path (see
-  // startStreamingExample), regardless of how they were reached -- clicking
-  // the example chip, restoring a shared #url=... link, or just pasting the
-  // URL in and hitting Fetch all have to end up here, not just the chip.
-  var STREAMING_URLS = Object.keys(EXAMPLES).reduce(function (urls, key) {
-    if (EXAMPLES[key].streaming) urls[EXAMPLES[key].url] = true;
-    return urls;
-  }, {});
+  // Infer potential message streams from their RDF syntax rather than from
+  // dataset URLs. Ordinary RDF is accumulated as one provisional dataset;
+  // inline or HTTP version declarations let the parser expose boundaries.
+  function inferredStreamingOptions (url) {
+    var path;
+    try { path = new URL(url, document.baseURI).pathname.toLowerCase(); } catch (error) { return null; }
+    var compression = null;
+    if (path.endsWith('.gz')) {
+      compression = 'gzip';
+      path = path.slice(0, -3);
+    }
+    if (path.endsWith('.jelly')) return { format: 'application/x-jelly-rdf', compression: compression };
+    var textFormats = {
+      '.ttl': 'text/turtle',
+      '.turtle': 'text/turtle',
+      '.trig': 'application/trig',
+      '.nt': 'application/n-triples',
+      '.ntriples': 'application/n-triples',
+      '.nq': 'application/n-quads',
+      '.nquads': 'application/n-quads',
+      '.n3': 'text/n3'
+    };
+    var suffix = Object.keys(textFormats).find(function (extension) { return path.endsWith(extension); });
+    return suffix ? { format: textFormats[suffix], compression: compression } : null;
+  }
 
   function runFetch() {
     var url = urlInput.value.trim();
@@ -949,9 +1071,10 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    if (STREAMING_URLS[url]) {
+    var streamingOptions = inferredStreamingOptions(url);
+    if (streamingOptions) {
       updateHash();
-      startStreamingExample(url);
+      startStreamingExample(url, streamingOptions);
       return;
     }
 

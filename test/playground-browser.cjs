@@ -16,8 +16,21 @@ const puppeteer = require('puppeteer-core');
       quad(namedNode('https://example.org/s' + i), namedNode('https://example.org/p' + j), literal('Jelly value ' + i))));
     writer.end((error, bytes) => error ? reject(error) : resolve(require('node:zlib').gzipSync(bytes)));
   });
+  const singleJelly = await new Promise((resolve, reject) => {
+    const writer = new Writer({ namespaces: { ex: 'https://example.org/' } });
+    writer.addMessage([quad(namedNode('https://example.org/single'), namedNode('https://schema.org/name'), literal('One Jelly message'))]);
+    writer.end((error, bytes) => error ? reject(error) : resolve(bytes));
+  });
+  const flatMessages = require('node:zlib').gzipSync('VERSION "1.1-messages"\n' + Array.from({ length: 1002 }, (_, i) =>
+    '<https://example.org/observation/' + i + '> <https://example.org/value> "' + i + '" .\nMESSAGE\n'
+  ).join(''));
+  const ordinaryGzip = require('node:zlib').gzipSync('<https://example.org/ordinary> <https://schema.org/name> "Ordinary compressed RDF" .');
   let proxiedAccept;
   let contextWasProxied = false;
+  let riverbenchJellyWasProxied = false;
+  let riverbenchFlatWasProxied = false;
+  let riverbenchStreamingAccept;
+  let ordinaryGzipRequests = 0;
   const server = http.createServer((req, res) => {
     if (req.url === '/prefixes.trig') {
       res.setHeader('Content-Type', 'application/trig');
@@ -29,9 +42,25 @@ const puppeteer = require('puppeteer-core');
       res.end(process.env.JELLY_FIXTURE ? fs.readFileSync(process.env.JELLY_FIXTURE) : jelly);
       return;
     }
+    if (req.url === '/single.jelly') {
+      res.setHeader('Content-Type', 'application/x-jelly-rdf');
+      res.end(singleJelly);
+      return;
+    }
+    if (req.url === '/header-messages.trig') {
+      res.setHeader('Content-Type', 'application/trig; version="1.2-messages"');
+      res.end('<https://example.org/first> <https://schema.org/name> "First" .\nMESSAGE\n<https://example.org/second> <https://schema.org/name> "Second" .');
+      return;
+    }
     if (req.url === '/large.trig') {
       res.setHeader('Content-Type', 'application/trig');
       res.end('VERSION "1.2-messages"\nPREFIX geo: <http://www.opengis.net/ont/geosparql#>\n' + Array.from({ length: 1002 }, (_, i) => '<https://example.org/repeated> geo:asWKT "POINT (' + (i % 170) + ' 20)"^^geo:wktLiteral .').join('\nMESSAGE\n'));
+      return;
+    }
+    if (req.url === '/ordinary.nt.gz') {
+      ordinaryGzipRequests++;
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.end(ordinaryGzip);
       return;
     }
     if (req.url === '/ldes.ttl') {
@@ -64,6 +93,19 @@ const puppeteer = require('puppeteer-core');
       contextWasProxied = true;
       res.setHeader('Content-Type', 'application/ld+json');
       res.end(JSON.stringify({ '@context': { schema: 'https://schema.org/' } }));
+      return;
+    }
+    if (req.url === '/proxy/https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/jelly_full.jelly.gz') {
+      riverbenchJellyWasProxied = true;
+      riverbenchStreamingAccept = req.headers.accept;
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.end(jelly);
+      return;
+    }
+    if (req.url === '/proxy/https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/flat_full.nt.gz') {
+      riverbenchFlatWasProxied = true;
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.end(flatMessages);
       return;
     }
     if (req.url === '/blank-nodes.ttl') {
@@ -203,10 +245,10 @@ const puppeteer = require('puppeteer-core');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.goto(base + '#url=' + encodeURIComponent(base + 'large.trig') + '&pane=explore&view=map&scope=window');
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused'));
     await page.waitForFunction(() => document.querySelector('.geometry-list h3')?.textContent.includes('1000 geometries'), { timeout: 60000 });
     await page.select('#message-scope', 'memory');
-    await page.waitForFunction(() => document.querySelector('.geometry-list h3')?.textContent.includes('1002 geometries'));
+    await page.waitForFunction(() => document.querySelector('.geometry-list h3')?.textContent.includes('1000 geometries'));
     assert.equal(await page.$eval('#message-editor .CodeMirror', el => (el.CodeMirror.getValue().match(/POINT/g) || []).length), 1, 'Explore scope does not expand the selected-message output');
     await page.click('#load-more-messages');
     await page.waitForFunction(() => document.querySelector('.geometry-list h3')?.textContent.startsWith('2 geometries'));
@@ -218,15 +260,16 @@ const puppeteer = require('puppeteer-core');
     assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('schema: https://schema.org/')));
     assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('schema2: http://schema.org/')));
     assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('custom: https://example.org/custom/')));
-    assert.ok(await page.$eval('#message-editor .CodeMirror', el => el.CodeMirror.getValue().includes('schema2:name')));
+    assert.equal(await page.$eval('#messages-panel', el => el.hidden), true);
+    assert.ok(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue().includes('schema2:name')));
     await page.goto(base + '#url=' + encodeURIComponent(base + 'data.jelly.gz'));
-    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'), { timeout: 60000 });
+    await page.waitForFunction(() => /^(Paused|Done)/.test(document.querySelector('#status').textContent), { timeout: 60000 });
     assert.equal(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue()), '', 'No hidden whole-log editor for Jelly');
     assert.ok(await page.$eval('#message-editor .CodeMirror', el => el.CodeMirror.getValue().length > 0));
     assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('http://www.w3.org/1999/02/22-rdf-syntax-ns#')));
     if (!process.env.JELLY_FIXTURE) {
       assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('https://example.org/')));
-      assert.ok(await page.$eval('#status', el => el.textContent.includes('10020 triples in 1002 messages')));
+      assert.ok(await page.$eval('#status', el => el.textContent.includes('1002 messages fetched so far')));
     }
     console.log('Jelly regression:', await page.$eval('#status', el => el.textContent));
     await page.click('#load-more-messages');
@@ -267,6 +310,32 @@ const puppeteer = require('puppeteer-core');
     }, base + 'proxied.jsonld');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     assert.equal(contextWasProxied, true);
+    const riverbenchJellyUrl = 'https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/jelly_full.jelly.gz';
+    await page.goto(base + '#url=' + encodeURIComponent(riverbenchJellyUrl) + '&proxy=' + encodeURIComponent(base + 'proxy/'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused'));
+    assert.equal(riverbenchJellyWasProxied, true);
+    assert.match(riverbenchStreamingAccept, /^application\/n-quads/);
+    assert.ok(await page.$eval('#status', el => Number((el.textContent.match(/(\d+) messages fetched so far/) || [])[1]) >= 1000));
+    assert.equal(await page.$eval('#message-slider', el => el.max), '999');
+    const riverbenchFlatUrl = 'https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/flat_full.nt.gz';
+    await page.goto(base + '#url=' + encodeURIComponent(riverbenchFlatUrl) + '&proxy=' + encodeURIComponent(base + 'proxy/'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused'));
+    assert.equal(riverbenchFlatWasProxied, true);
+    assert.ok(await page.$eval('#status', el => Number((el.textContent.match(/(\d+) messages fetched so far/) || [])[1]) >= 1000));
+    assert.equal(await page.$eval('#message-slider', el => el.max), '999');
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'ordinary.nt.gz'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    assert.equal(ordinaryGzipRequests, 1, 'Ordinary RDF stays on the same streaming request');
+    assert.equal(await page.$eval('#messages-panel', el => el.hidden), true);
+    assert.ok(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue().includes('Ordinary compressed RDF')));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'single.jelly'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    assert.equal(await page.$eval('#messages-panel', el => el.hidden), true);
+    assert.ok(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue().includes('One Jelly message')));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'header-messages.trig'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    assert.equal(await page.$eval('#messages-panel', el => el.hidden), false);
+    assert.equal(await page.$eval('#message-slider', el => el.max), '1');
     assert.deepEqual(errors, []);
     console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
