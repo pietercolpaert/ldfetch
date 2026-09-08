@@ -84,6 +84,10 @@ var WIKIDATA_SPARQL_CONSTRUCT_QUERY = [
   'LIMIT 20'
 ].join('\n');
 
+function riverBenchJellyUrl(dataset) {
+  return 'https://w3id.org/riverbench/datasets/' + dataset + '/dev/files/jelly_full.jelly.gz';
+}
+
 var EXAMPLES = {
   wikidata: {
     url: 'https://www.wikidata.org/wiki/Special:EntityData/Q57.ttl'
@@ -236,6 +240,51 @@ var EXAMPLES = {
   'riverbench-weather': {
     url: new URL('examples/riverbench-weather-sample.trig', document.baseURI).href,
     scope: 'memory'
+  },
+  'riverbench-jelly-assist-iot-weather': {
+    url: riverBenchJellyUrl('assist-iot-weather')
+  },
+  'riverbench-jelly-assist-iot-weather-graphs': {
+    url: riverBenchJellyUrl('assist-iot-weather-graphs')
+  },
+  'riverbench-jelly-citypulse-traffic': {
+    url: riverBenchJellyUrl('citypulse-traffic')
+  },
+  'riverbench-jelly-citypulse-traffic-graphs': {
+    url: riverBenchJellyUrl('citypulse-traffic-graphs')
+  },
+  'riverbench-jelly-dbpedia-live': {
+    url: riverBenchJellyUrl('dbpedia-live')
+  },
+  'riverbench-jelly-digital-agenda-indicators': {
+    url: riverBenchJellyUrl('digital-agenda-indicators')
+  },
+  'riverbench-jelly-linked-spending': {
+    url: riverBenchJellyUrl('linked-spending')
+  },
+  'riverbench-jelly-lod-katrina': {
+    url: riverBenchJellyUrl('lod-katrina')
+  },
+  'riverbench-jelly-muziekweb': {
+    url: riverBenchJellyUrl('muziekweb')
+  },
+  'riverbench-jelly-nanopubs': {
+    url: riverBenchJellyUrl('nanopubs')
+  },
+  'riverbench-jelly-officegraph': {
+    url: riverBenchJellyUrl('officegraph')
+  },
+  'riverbench-jelly-openaire-lod': {
+    url: riverBenchJellyUrl('openaire-lod')
+  },
+  'riverbench-jelly-osm2rdf-denmark': {
+    url: riverBenchJellyUrl('osm2rdf-denmark')
+  },
+  'riverbench-jelly-politiquices': {
+    url: riverBenchJellyUrl('politiquices')
+  },
+  'riverbench-jelly-yago-annotated-facts': {
+    url: riverBenchJellyUrl('yago-annotated-facts')
   },
   'estat-cube': {
     url: new URL('examples/japan-estat-data-cube.ttl', document.baseURI).href
@@ -1229,9 +1278,9 @@ document.addEventListener('DOMContentLoaded', function () {
     viewState.entity = '';
     visualizationWorkbench.restoreState(viewState);
     restoredMessagePosition = null;
-    // runFetch() itself checks STREAMING_URLS and routes accordingly, so
-    // this works the same whether the URL got here via this click, a
-    // restored #url=... link, or the user just pasting it in.
+    // runFetch() infers streaming support from the URL and response, so this
+    // works the same whether the URL got here via this click, a restored
+    // #url=... link, or the user just pasting it in.
     runFetch();
   });
 

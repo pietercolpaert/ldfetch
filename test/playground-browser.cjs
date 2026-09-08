@@ -143,6 +143,26 @@ const puppeteer = require('puppeteer-core');
     }), ['Pieter Heyvaert', 'Ruben Verborgh', 'Patrick Hochstenbach', 'ORCID researcher']);
     assert.ok(await page.$('[data-example="mol-ldes"]'));
     assert.ok(await page.$('[data-example="riverbench-weather"]'));
+    assert.deepEqual(await page.$$eval('.example-menu section', sections => {
+      const riverBench = sections.find(section => section.querySelector('h3')?.textContent === 'RiverBench Jelly archives');
+      return Array.from(riverBench.querySelectorAll('.example-chip'), button => button.dataset.example);
+    }), [
+      'riverbench-jelly-assist-iot-weather',
+      'riverbench-jelly-assist-iot-weather-graphs',
+      'riverbench-jelly-citypulse-traffic',
+      'riverbench-jelly-citypulse-traffic-graphs',
+      'riverbench-jelly-dbpedia-live',
+      'riverbench-jelly-digital-agenda-indicators',
+      'riverbench-jelly-linked-spending',
+      'riverbench-jelly-lod-katrina',
+      'riverbench-jelly-muziekweb',
+      'riverbench-jelly-nanopubs',
+      'riverbench-jelly-officegraph',
+      'riverbench-jelly-openaire-lod',
+      'riverbench-jelly-osm2rdf-denmark',
+      'riverbench-jelly-politiquices',
+      'riverbench-jelly-yago-annotated-facts'
+    ]);
     await page.click('#more-examples > summary');
     await page.waitForFunction(() => document.querySelector('#explore-tab').textContent === 'Explore (1)');
     assert.equal(await page.$eval('#triples-pane', el => el.hidden), false);
