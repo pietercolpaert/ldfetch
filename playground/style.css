@@ -264,7 +264,16 @@ a:hover {
   min-width: 16rem;
 }
 
-.proxy-field input {
+.proxy-field p {
+  margin: 0 0 0.4rem;
+}
+
+.proxy-toggle-label {
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.proxy-field input[type="url"] {
   width: 100%;
   border: 1px solid #bfcce0;
   border-radius: 6px;
@@ -272,6 +281,11 @@ a:hover {
   color: var(--text);
   padding: 0.5rem 0.65rem;
   font: inherit;
+}
+
+.proxy-field input:disabled {
+  background: #f1f4f7;
+  color: var(--muted);
 }
 
 .proxy-field small {

@@ -241,6 +241,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var urlInput = document.getElementById('url');
   var fetchBtn = document.getElementById('fetch-btn');
   var advanced = document.getElementById('advanced');
+  var proxyToggle = document.getElementById('proxy-toggle');
   var proxyInput = document.getElementById('proxy-url');
   var outputFormat = document.getElementById('output-format');
   var frameOptions = document.getElementById('frame-options');
@@ -369,9 +370,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var params = new URLSearchParams();
     var visualizationState = visualizationWorkbench.getState();
     params.set('url', urlInput.value.trim());
-    // Keep an explicitly cleared proxy shareable too. Omitting it would make
-    // a reload silently restore DEFAULT_PROXY from the form's initial value.
-    params.set('proxy', proxyInput.value.trim());
+    if (proxyToggle.checked && proxyInput.value.trim()) params.set('proxy', proxyInput.value.trim());
     params.set('format', outputFormat.value);
     if (activePane === 'explore') params.set('pane', 'explore');
     if (messageScope.value !== 'current') params.set('scope', messageScope.value);
@@ -414,12 +413,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var camera = (params.get('camera') || '').split(',').map(Number);
     if (camera.length !== 3 || !camera.every(Number.isFinite) || Math.abs(camera[0]) > 180 || Math.abs(camera[1]) > 90 || camera[2] < 0 || camera[2] > 22) camera = undefined;
     if (params.has('url')) urlInput.value = params.get('url');
-    if (params.has('proxy')) proxyInput.value = params.get('proxy');
+    proxyToggle.checked = params.has('proxy') && !!params.get('proxy');
+    proxyInput.value = proxyToggle.checked ? params.get('proxy') : DEFAULT_PROXY;
+    proxyInput.disabled = !proxyToggle.checked;
     if (OUTPUT_FORMATS[params.get('format')]) outputFormat.value = params.get('format');
     frameToggle.checked = params.get('frameEnabled') === '1';
     if (params.has('frame')) frameCm.setValue(params.get('frame'));
     restoredMessagePosition = params.has('message') ? Math.max(1, parseInt(params.get('message'), 10) || 1) : null;
-    advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked || proxyInput.value !== DEFAULT_PROXY;
+    advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked || proxyToggle.checked;
     visualizationWorkbench.restoreState({
       view: params.get('view') || '',
       filter: params.get('filter') || '',
@@ -446,6 +447,11 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   advanced.addEventListener('toggle', updateHash);
+  proxyToggle.addEventListener('change', function () {
+    if (proxyToggle.checked && !proxyInput.value.trim()) proxyInput.value = DEFAULT_PROXY;
+    proxyInput.disabled = !proxyToggle.checked;
+    updateHash();
+  });
   proxyInput.addEventListener('input', updateHash);
   urlInput.addEventListener('input', function () {
     // A message number belongs to the previously loaded URL and must not be
@@ -754,7 +760,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setStatus('Connecting …');
     fetchBtn.disabled = true;
 
-    fetch(proxyInput.value.trim() + url).then(function (response) {
+    fetch((proxyToggle.checked ? proxyInput.value.trim() : '') + url).then(function (response) {
       if (!response.ok) throw new Error('Request failed: HTTP ' + response.status);
       streamingReader = response.body.getReader();
       streamingDecoder = new TextDecoder('utf-8');
@@ -957,7 +963,7 @@ document.addEventListener('DOMContentLoaded', function () {
     visualizationWorkbench.reset(COMMON_PREFIXES, 'loaded document');
     setStatus('Fetching …');
 
-    var fetcher = new window.ldfetch({ proxy: proxyInput.value.trim() });
+    var fetcher = new window.ldfetch({ proxy: proxyToggle.checked ? proxyInput.value.trim() : '' });
     Object.keys(COMMON_PREFIXES).forEach(function (name) {
       fetcher.addPrefix(name, COMMON_PREFIXES[name]);
     });
