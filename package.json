@@ -57,7 +57,7 @@
     "process": "^0.11.10",
     "puppeteer-core": "^25.10.0",
     "q": "^2.0.3",
-    "rdf-parser-ts": "^0.3.1",
+    "rdf-parser-ts": "^0.3.2",
     "rdf-writer-ts": "^0.1.1",
     "rdfa-streaming-parser": "^3.0.2",
     "rdfjs-jelly": "^0.1.4",
