@@ -17,6 +17,7 @@ const puppeteer = require('puppeteer-core');
     writer.end((error, bytes) => error ? reject(error) : resolve(require('node:zlib').gzipSync(bytes)));
   });
   let proxiedAccept;
+  let contextWasProxied = false;
   const server = http.createServer((req, res) => {
     if (req.url === '/prefixes.trig') {
       res.setHeader('Content-Type', 'application/trig');
@@ -52,6 +53,17 @@ const puppeteer = require('puppeteer-core');
       proxiedAccept = req.headers.accept;
       res.setHeader('Content-Type', 'text/turtle');
       res.end('<#resource> <https://schema.org/name> "Fetched through proxy".');
+      return;
+    }
+    if (req.url.startsWith('/proxy/http://') && req.url.endsWith('/proxied.jsonld')) {
+      res.setHeader('Content-Type', 'application/ld+json');
+      res.end(JSON.stringify({ '@context': 'http://contexts.example/context.jsonld', '@id': '#resource', 'schema:name': 'Context fetched through proxy' }));
+      return;
+    }
+    if (req.url === '/proxy/http://contexts.example/context.jsonld') {
+      contextWasProxied = true;
+      res.setHeader('Content-Type', 'application/ld+json');
+      res.end(JSON.stringify({ '@context': { schema: 'https://schema.org/' } }));
       return;
     }
     if (req.url === '/blank-nodes.ttl') {
@@ -249,6 +261,12 @@ const puppeteer = require('puppeteer-core');
     assert.equal(await page.$eval('#proxy-toggle', el => el.checked), true);
     assert.equal(await page.$eval('#proxy-url-field', el => el.hidden), false);
     assert.equal(await page.$eval('#proxy-url', el => el.value), base + 'proxy/');
+    await page.evaluate(url => {
+      document.querySelector('#url').value = url;
+      document.querySelector('#url-form').requestSubmit();
+    }, base + 'proxied.jsonld');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    assert.equal(contextWasProxied, true);
     assert.deepEqual(errors, []);
     console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }

@@ -232,6 +232,35 @@ test('RdfParsers resolves a remote @context referenced by an embedded JSON-LD <s
   }
 });
 
+test('RdfParsers routes remote JSON-LD contexts through the configured proxy', async () => {
+  const http = require('node:http');
+  let requestedPath;
+  const server = http.createServer((req, res) => {
+    requestedPath = req.url;
+    res.writeHead(200, { 'content-type': 'application/ld+json' });
+    res.end(JSON.stringify({ '@context': { schema: 'https://schema.org/' } }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+
+  try {
+    const proxy = `http://127.0.0.1:${server.address().port}/proxy/`;
+    const contextUrl = 'http://contexts.example/context.jsonld';
+    const { triples } = await collect({
+      bodyText: JSON.stringify({ '@context': contextUrl, '@id': 'https://example.org/s', 'schema:name': 'proxied context resolved' }),
+      contentType: 'application/ld+json',
+      baseIRI: 'https://example.org/document.jsonld',
+      proxy
+    });
+    assert.equal(requestedPath, '/proxy/http://contexts.example/context.jsonld');
+    assert.ok(triples.some((triple) => triple.object.value === 'proxied context resolved'));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('RdfParsers parses SHACL Compact syntax and reports its default prefixes', async () => {
   const shaclc = 'PREFIX ex: <https://example.org/test#>\n' +
     'shape ex:TestShape -> ex:TestClass {\n  targetNode=ex:TestNode .\n}';
