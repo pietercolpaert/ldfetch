@@ -405,3 +405,26 @@ test('RdfParsers decompresses gzip-compressed Jelly-RDF', async () => {
   assert.equal(triples[0].object.value, 'from gzipped jelly');
   assert.equal(prefixes.ex, 'https://example.org/');
 });
+
+test('RdfParsers falls back to the original request URL for extension guessing when a redirect drops it', async () => {
+  // Mirrors real-world redirects to opaque storage URLs (GitHub release
+  // assets, signed S3/Azure Blob URLs, ...): the final response URL
+  // (baseIRI) no longer carries the ".jelly.gz" extension, but the
+  // originally requested URL (requestUrl) still does.
+  const { DataFactory, Writer } = require('rdfjs-jelly');
+  const { namedNode, literal, quad } = DataFactory;
+  const jellyBytes = await new Promise((resolve, reject) => {
+    const writer = new Writer({ namespaces: { ex: 'https://example.org/' } });
+    writer.addQuad(quad(namedNode('https://example.org/s'), namedNode('https://example.org/p'), literal('from redirected jelly')));
+    writer.end((error, output) => error ? reject(error) : resolve(output));
+  });
+
+  const { triples } = await collect({
+    bodyBuffer: zlib.gzipSync(jellyBytes),
+    contentType: 'application/octet-stream',
+    baseIRI: 'https://storage.example.com/blob/e34d9512-a5f2-4c0a-bc12-04cc8a84b649?sig=abc',
+    requestUrl: 'https://example.org/data/jelly_10K.jelly.gz'
+  });
+  assert.equal(triples.length, 1);
+  assert.equal(triples[0].object.value, 'from redirected jelly');
+});
