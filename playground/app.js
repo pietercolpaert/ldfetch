@@ -128,6 +128,15 @@ var EXAMPLES = {
   shaclc: {
     url: 'https://raw.githubusercontent.com/jeswr/shaclcjs/main/__tests__/valid/basic-shape-with-targets.shaclc'
   },
+  // Compiled from the worked examples in the SHACL 1.2 User Interfaces spec
+  // (https://w3c.github.io/data-shapes/shacl12-ui/): property groups/
+  // ordering, a nested resource, an inverse-path property, a multi-viewer
+  // table over skos:broader, a blank-node "details" editor, and a few more
+  // built-in editors -- chosen to also exercise several playground views
+  // at once (People, Shapes, Form preview, Taxonomy, Timeline, Ontology).
+  'shacl-ui': {
+    url: new URL('examples/shacl-ui-showcase.ttl', document.baseURI).href
+  },
   geospatial: {
     url: new URL('examples/geospatial-messages.trig', document.baseURI).href
   },

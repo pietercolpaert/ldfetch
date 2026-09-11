@@ -1,0 +1,213 @@
+# A self-contained showcase for the ldfetch playground, compiled from the
+# worked examples in the SHACL 1.2 User Interfaces spec
+# (https://w3c.github.io/data-shapes/shacl12-ui/): SHACL shapes annotated
+# with the spec's `shui:` (SHACL-UI) vocabulary for editors, viewers,
+# property groups and search, plus the small data graphs the spec pairs
+# with each shape. The `shui:` terms themselves aren't interpreted by this
+# playground (it renders plain SHACL Core: sh:property/path/name/group/
+# order/datatype/nodeKind/class/in/node), but are kept in so this document
+# is genuinely the spec's own material, not a lookalike.
+#
+# Chosen and combined so a single fetch lights up several playground views
+# at once: People, Shapes, Form preview, Taxonomy, Timeline, Ontology,
+# Relationships, alongside Overview/Dataset profile.
+
+@prefix ex: <https://example.org/shacl-ui-showcase/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix schema: <https://schema.org/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shui: <http://www.w3.org/ns/shacl-ui/> .
+
+# --- Global SHACL-UI configuration (spec: "SHACL Global Configuration") ---
+# Read by SHACL-UI-aware form generators, not by this playground.
+ex:config a shui:Configuration ;
+  shui:defaultNamespace "https://example.org/shacl-ui-showcase/" ;
+  shui:languagePreference ( "" "en" "nl" ) ;
+  shui:timeZone "Europe/Brussels" ;
+  shui:labelPreference ( skos:prefLabel dcterms:title rdfs:label ) .
+
+# --- "Getting Started with SHACL UI": property groups, ordering, and a
+# nested resource (spec's Tim Berners-Lee / W3C running example) ---------
+ex:PersonNameGroup a sh:PropertyGroup ;
+  sh:order 0 ;
+  rdfs:label "Name" .
+
+ex:PersonShape a sh:NodeShape ;
+  sh:targetClass schema:Person ;
+  sh:property
+    ex:honorificPrefix, ex:givenName, ex:additionalName, ex:familyName,
+    ex:birthDate, ex:affiliationProperty .
+
+ex:honorificPrefix a sh:PropertyShape ;
+  sh:path schema:honorificPrefix ; sh:name "Honorific prefix" ;
+  sh:datatype xsd:string ; sh:order 0 ; sh:group ex:PersonNameGroup ; sh:maxCount 1 .
+ex:givenName a sh:PropertyShape ;
+  sh:path schema:givenName ; sh:name "Given name" ;
+  sh:datatype xsd:string ; sh:order 1 ; sh:group ex:PersonNameGroup ; sh:minCount 1 ; sh:maxCount 1 .
+ex:additionalName a sh:PropertyShape ;
+  sh:path schema:additionalName ; sh:name "Additional name" ;
+  sh:datatype xsd:string ; sh:order 2 ; sh:group ex:PersonNameGroup .
+ex:familyName a sh:PropertyShape ;
+  sh:path schema:familyName ; sh:name "Family name" ;
+  sh:datatype xsd:string ; sh:order 3 ; sh:group ex:PersonNameGroup ; sh:minCount 1 ; sh:maxCount 1 .
+ex:birthDate a sh:PropertyShape ;
+  sh:path schema:birthDate ; sh:name "Birth date" ;
+  sh:datatype xsd:date ; sh:order 4 ; sh:maxCount 1 .
+# Nested-resource editing (spec: "Nested Resource Forms"): the affiliated
+# Organization is edited inline rather than by picking an IRI from a list.
+ex:affiliationProperty a sh:PropertyShape ;
+  sh:path schema:affiliation ; sh:name "Affiliation" ;
+  sh:nodeKind sh:IRI ; sh:class schema:Organization ; sh:order 5 ;
+  shui:editor shui:DetailsEditor .
+
+ex:TimBL a schema:Person ;
+  schema:name "Sir Tim Berners-Lee" ;
+  schema:honorificPrefix "Sir" ;
+  schema:givenName "Tim" ;
+  schema:additionalName "John" ;
+  schema:familyName "Berners-Lee" ;
+  schema:birthDate "1955-06-08"^^xsd:date ;
+  schema:affiliation ex:W3C .
+
+ex:W3C a schema:Organization ;
+  schema:name "World Wide Web Consortium"@en, "Consortium World Wide Web"@fr ;
+  schema:foundingDate "1994-10-01"^^xsd:date ;
+  schema:url <https://www.w3.org> .
+
+# --- "Property Paths": editing an inverse path (spec's Department example,
+# View Mode + Edit Mode sections combined) -------------------------------
+ex:departmentProperty a sh:PropertyShape ;
+  sh:path [ sh:inversePath ex:member ] ;
+  sh:name "Department" ; sh:class ex:Department ; sh:order 6 .
+ex:PersonShape sh:property ex:departmentProperty .
+
+ex:alice a schema:Person, foaf:Person ;
+  foaf:name "Alice" ;
+  schema:givenName "Alice" ; schema:familyName "Nakamura" ;
+  schema:birthDate "1988-03-14"^^xsd:date .
+ex:bob a schema:Person, foaf:Person ;
+  foaf:name "Bob" ;
+  schema:givenName "Bob" ; schema:familyName "Okafor" ;
+  schema:birthDate "1990-11-02"^^xsd:date .
+
+ex:researchDept a ex:Department ;
+  rdfs:label "Research Department" ;
+  ex:member ex:alice .
+ex:engDept a ex:Department ;
+  rdfs:label "Engineering Department" ;
+  ex:member ex:bob .
+
+# --- "Built-in Widgets -> Viewers": shui:ValueTableViewer, rendering a
+# node's related values as a table with its own column shape, over an
+# inverse skos:broader path (spec's Concept "narrower" table example) ----
+ex:HierarchicalRelationships a sh:PropertyGroup ; rdfs:label "Hierarchy" .
+
+ex:conceptBroaderInverse a sh:PropertyShape ;
+  sh:path [ sh:inversePath skos:broader ] ;
+  sh:group ex:HierarchicalRelationships ;
+  sh:name "Narrower concepts (table)" ;
+  shui:viewer shui:ValueTableViewer ;
+  sh:node ex:ConceptTableShape .
+skos:Concept sh:property ex:conceptBroaderInverse .
+
+ex:ConceptTableShape a sh:NodeShape ;
+  sh:targetClass skos:Concept ;
+  rdfs:label "Concept table shape" ;
+  rdfs:comment "Columns rendered by shui:ValueTableViewer for narrower concepts." ;
+  sh:property ex:conceptTableSelf, ex:conceptTableType, ex:conceptTableAltLabel .
+ex:conceptTableSelf a sh:PropertyShape ;
+  sh:path ex:self ; sh:name "Narrower concept" ; sh:nodeKind sh:IRI ; sh:order 0 ;
+  sh:values sh:this ; sh:description "Renders the narrower concept itself." .
+ex:conceptTableType a sh:PropertyShape ;
+  sh:path rdf:type ; sh:name "Type" ; sh:nodeKind sh:IRI ; sh:order 1 ;
+  sh:description "The concept's rdf:type(s)." .
+ex:conceptTableAltLabel a sh:PropertyShape ;
+  sh:path skos:altLabel ; sh:name "Alt labels" ; sh:order 2 ;
+  sh:description "Alternative labels, if any." .
+
+ex:webStandards a skos:Concept ; skos:prefLabel "Web Standards"@en ; skos:altLabel "Standards"@en .
+ex:linkedData a skos:Concept ; skos:prefLabel "Linked Data"@en ; skos:broader ex:webStandards .
+ex:shacl a skos:Concept ; skos:prefLabel "SHACL"@en ; skos:altLabel "Shapes Constraint Language"@en ; skos:broader ex:linkedData .
+ex:shaclUi a skos:Concept ; skos:prefLabel "SHACL UI"@en ; skos:broader ex:shacl .
+
+# --- "Built-in Widgets -> Editors": shui:DetailsEditor over a blank node
+# (spec's Product/weight example -- a numeric value plus a unit) --------
+ex:Product a owl:Class, sh:NodeShape ;
+  rdfs:label "Product" ; rdfs:subClassOf owl:Thing ;
+  sh:property ex:productWeight, ex:productPrice, ex:productInStock, ex:productDescription .
+
+ex:productWeight a sh:PropertyShape ;
+  sh:path ex:weight ; sh:name "Weight" ; sh:order 0 ;
+  sh:description "A blank node with a numeric value and a unit." ;
+  shui:editor shui:DetailsEditor ; shui:viewer shui:DetailsViewer ;
+  sh:maxCount 1 ; sh:nodeKind sh:BlankNode ; sh:node ex:ValueWithUnit .
+ex:ValueWithUnit a sh:NodeShape ;
+  rdfs:label "Value with unit" ;
+  sh:property ex:valueNumeric, ex:valueUnit .
+ex:valueNumeric a sh:PropertyShape ;
+  sh:path ex:numericValue ; sh:name "Numeric value" ;
+  sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 .
+ex:valueUnit a sh:PropertyShape ;
+  sh:path ex:unit ; sh:name "Unit" ;
+  sh:class <http://qudt.org/schema/qudt/Unit> ; sh:minCount 1 ; sh:maxCount 1 .
+
+ex:productPrice a sh:PropertyShape ;
+  sh:path ex:price ; sh:name "Price" ; sh:order 1 ;
+  sh:datatype xsd:decimal ; shui:editor shui:NumberFieldEditor ; sh:maxCount 1 .
+ex:productInStock a sh:PropertyShape ;
+  sh:path ex:inStock ; sh:name "In stock" ; sh:order 2 ;
+  sh:datatype xsd:boolean ; shui:editor shui:BooleanEditor ; sh:maxCount 1 .
+ex:productDescription a sh:PropertyShape ;
+  sh:path dcterms:description ; sh:name "Description" ; sh:order 3 ;
+  sh:datatype rdf:HTML ; sh:singleLine false ; shui:editor shui:RichTextEditor ; sh:maxCount 1 .
+
+ex:mechanicalKeyboard a ex:Product ;
+  rdfs:label "Mechanical keyboard" ;
+  # sh:class qudt:Unit is left deliberately unsatisfied here (no local
+  # qudt:Unit type triple for the unit IRI below) -- fetch this example and
+  # press "Validate loaded data" on the Shapes view to see it surface as a
+  # real SHACL finding, same as any other loaded document.
+  ex:weight [ ex:numericValue "1.1"^^xsd:decimal ; ex:unit <http://qudt.org/vocab/unit/KiloGM> ] ;
+  ex:price "89.90"^^xsd:decimal ;
+  ex:inStock true ;
+  dcterms:description "<p>A compact mechanical keyboard with hot-swappable switches.</p>"^^rdf:HTML .
+
+# --- More built-in editors: shui:EnumSelectEditor, shui:IRIEditor,
+# shui:DateTimePickerEditor, shui:BooleanEditor -------------------------
+ex:AustralianAddressShape a sh:NodeShape ;
+  sh:targetClass ex:AustralianAddress ;
+  rdfs:label "Australian address shape" ;
+  sh:property ex:addressRegion, ex:addressSeeAlso .
+ex:addressRegion a sh:PropertyShape ;
+  sh:path schema:addressRegion ; sh:name "State/territory" ; sh:order 0 ;
+  sh:in ( "ACT" "NSW" "NT" "QLD" "SA" "TAS" "VIC" "WA" ) ; shui:editor shui:EnumSelectEditor .
+ex:addressSeeAlso a sh:PropertyShape ;
+  sh:path rdfs:seeAlso ; sh:name "See also" ; sh:order 1 ;
+  sh:nodeKind sh:IRI ; shui:editor shui:IRIEditor .
+
+ex:sydneyOffice a ex:AustralianAddress ;
+  rdfs:label "Sydney office" ;
+  schema:addressRegion "NSW" ;
+  rdfs:seeAlso <https://en.wikipedia.org/wiki/Sydney> .
+
+ex:CustomerShape a sh:NodeShape ;
+  sh:targetClass ex:Customer ;
+  sh:property ex:customerLastVisit, ex:customerMarried .
+ex:customerLastVisit a sh:PropertyShape ;
+  sh:path ex:lastVisitTime ; sh:name "Last visit" ; sh:order 0 ;
+  sh:datatype xsd:dateTime ; shui:editor shui:DateTimePickerEditor ; sh:maxCount 1 .
+ex:customerMarried a sh:PropertyShape ;
+  sh:path ex:married ; sh:name "Married" ; sh:order 1 ;
+  sh:datatype xsd:boolean ; shui:editor shui:BooleanEditor ; sh:maxCount 1 .
+
+ex:customer42 a ex:Customer ;
+  rdfs:label "Customer #42" ;
+  ex:lastVisitTime "2026-09-01T14:22:00Z"^^xsd:dateTime ;
+  ex:married true ;
+  ex:homeAddress ex:sydneyOffice .
