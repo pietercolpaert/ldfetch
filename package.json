@@ -60,7 +60,7 @@
     "rdf-parser-ts": "^0.3.2",
     "rdf-writer-ts": "^0.1.1",
     "rdfa-streaming-parser": "^3.0.2",
-    "rdfjs-jelly": "^0.1.4",
+    "rdfjs-jelly": "^0.1.5",
     "rdfxml-streaming-parser": "^3.3.0",
     "shacl-engine": "^1.1.2",
     "shaclc-parse": "^2.0.0",
