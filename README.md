@@ -1,6 +1,6 @@
 # Linked Data Fetch: a HTTP client for RDF resources
 
-[![npm version](https://badge.fury.io/js/ldfetch.svg)](https://badge.fury.io/js/ldfetch) [![CDN JSDelivr](https://data.jsdelivr.com/v1/package/npm/ldfetch/badge)](https://cdn.jsdelivr.net/npm/ldfetch/dist/main.js)
+[![npm version](https://badge.fury.io/js/ldfetch.svg)](https://badge.fury.io/js/ldfetch)
 
 Fetch Linked Data documents within your browser, from the command line, or from your NodeJS script.
 
