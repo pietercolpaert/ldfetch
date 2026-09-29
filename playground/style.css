@@ -688,15 +688,29 @@ button {
 .term-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.3rem; }
 .term-badges span { padding: 0.1rem 0.45rem; border-radius: 999px; background: #edf3f8; color: #3b5670; font-size: 0.7rem; }
 .term-badges .deprecated { background: #fff1ec; color: #9b3e29; }
-.ontology-metadata, .ontology-overview, .ontology-index, .shape-topology, .rml-overview {
+.ontology-metadata, .ontology-overview, .ontology-index, .shape-topology, .rml-overview, .csvw-table {
   margin: 0 0 1rem;
   padding: 0.85rem;
   border: 1px solid #dfe6ee;
   border-radius: 8px;
   background: white;
 }
-.ontology-metadata h3, .ontology-overview h3, .ontology-index h3, .shape-topology h3, .rml-overview h3 { margin: 0 0 0.5rem; color: var(--primary); }
+.ontology-metadata h3, .ontology-overview h3, .ontology-index h3, .shape-topology h3, .rml-overview h3, .csvw-table h3 { margin: 0 0 0.5rem; color: var(--primary); }
 .ontology-metadata .entity-table th { width: 12rem; }
+.csvw-table .entity-table th { width: 12rem; }
+.csvw-table h4 { margin: 1rem 0 0.4rem; font-size: 0.85rem; }
+.csvw-table > p { margin: 0.3rem 0; font-size: 0.8rem; }
+.csvw-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; margin: 0.8rem 0 0.2rem; }
+.csvw-actions .view-note { margin: 0; }
+.csvw-columns, .csvw-preview { overflow: auto; border: 1px solid #dfe6ee; border-radius: 6px; }
+.csvw-preview { max-height: 32rem; }
+.csvw-columns table, .csvw-preview table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }
+.csvw-columns th, .csvw-columns td, .csvw-preview th, .csvw-preview td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #edf1f5; text-align: left; vertical-align: top; }
+.csvw-columns thead th, .csvw-preview thead th { position: sticky; top: 0; background: #f5f8fb; color: #3b5670; white-space: nowrap; }
+.csvw-columns tbody th small, .csvw-columns td small { display: block; color: #627487; font-weight: 400; }
+.csvw-columns code { font-size: 0.7rem; word-break: break-all; }
+.csvw-preview td { max-width: 18rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.csvw-preview td:first-child, .csvw-columns td:first-child { color: #8a9aab; }
 .ontology-index h4 { margin: 0.6rem 0 0.35rem; font-size: 0.8rem; }
 .ontology-index h4 small { color: #627487; font-weight: 400; }
 .term-index { display: flex; flex-wrap: wrap; gap: 0.3rem; }

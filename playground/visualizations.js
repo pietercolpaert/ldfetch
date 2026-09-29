@@ -33,6 +33,7 @@ var IIIF = 'http://iiif.io/api/presentation/3#';
 var AS = 'http://www.w3.org/ns/activitystreams#';
 var RML = 'http://semweb.mmlab.be/ns/rml#';
 var RR = 'http://www.w3.org/ns/r2rml#';
+var CSVW = 'http://www.w3.org/ns/csvw#';
 var RMLC = 'http://w3id.org/rml/';
 var SSSOM = 'https://w3id.org/sssom/';
 var ORG = 'http://www.w3.org/ns/org#';
@@ -1001,6 +1002,102 @@ function iiifModule() {
   };
 }
 
+// The tables a CSV on the Web metadata document describes: anything with a
+// csvw:url and a table schema of its own or of its table group. Converted
+// CSV2RDF output also has csvw:Table nodes with a csvw:url, but no schema.
+function csvwTables(index) {
+  var groups = {};
+  index.quads.forEach(function (quad) {
+    if (quad.predicate.value === CSVW + 'table') groups[termKey(quad.object)] = quad.subject;
+  });
+  return Array.from(index.entities.values()).filter(function (entity) {
+    if (!index.values(entity, CSVW + 'url').length) return false;
+    var group = groups[termKey(entity.term)];
+    return index.values(entity, CSVW + 'tableSchema').length > 0 || (!!group && index.values(group, CSVW + 'tableSchema').length > 0);
+  }).map(function (entity) {
+    var group = groups[termKey(entity.term)];
+    return { entity: entity, group: group ? index.entity(group) : null, url: index.values(entity, CSVW + 'url')[0].value };
+  });
+}
+
+// A CSVW table: its metadata and column schema, a preview of the first rows
+// of the CSV file itself, and a CSV2RDF button. The preview and conversion
+// are the playground's (state.csvw), which fetches through its proxy
+// setting and loads CSVW support only when it is needed.
+function csvwModule() {
+  var COLUMN_FLAGS = [['required', 'required'], ['virtual', 'virtual'], ['suppressOutput', 'not in output']];
+  function schemaOf(index, table) {
+    return index.values(table.entity, CSVW + 'tableSchema')[0] || (table.group && index.values(table.group, CSVW + 'tableSchema')[0]);
+  }
+  function literalValues(index, entity, predicate) {
+    return index.values(entity, predicate).map(function (term) { return term.value; });
+  }
+  function datatypeHtml(index, term) {
+    if (!term) return '';
+    if (term.termType !== 'BlankNode') return esc(index.compact(term.value));
+    var base = literalValues(index, term, CSVW + 'base')[0];
+    var format = literalValues(index, term, CSVW + 'format')[0];
+    var name = index.values(term, 'http://schema.org/name')[0];
+    return esc(name ? name.value : (base || 'string')) + (base && name ? ' <small>' + esc(base) + '</small>' : '') + (format ? ' <small>format <code>' + esc(format) + '</code></small>' : '');
+  }
+  function columnRow(index, column, position) {
+    var entity = index.entity(column);
+    var name = entity ? literalValues(index, entity, CSVW + 'name')[0] : '';
+    var titles = entity ? literalValues(index, entity, CSVW + 'title').filter(function (title) { return title !== name; }) : [];
+    var flags = COLUMN_FLAGS.filter(function (flag) { return entity && literalValues(index, entity, CSVW + flag[0]).indexOf('true') !== -1; }).map(function (flag) { return '<span>' + esc(flag[1]) + '</span>'; });
+    var valueUrl = entity ? literalValues(index, entity, CSVW + 'valueUrl')[0] : '';
+    var aboutUrl = entity ? literalValues(index, entity, CSVW + 'aboutUrl')[0] : '';
+    var about = entity ? index.values(entity, ['http://schema.org/description', 'http://purl.org/dc/terms/description', RDFS + 'comment'])[0] : null;
+    return '<tr' + selectAttr(column) + '><td>' + (position + 1) + '</td><th>' + esc(name || titles[0] || '') + (titles.length ? '<small>' + esc(titles.join(', ')) + '</small>' : '') + '</th>' +
+      '<td>' + datatypeHtml(index, entity && index.values(entity, CSVW + 'datatype')[0]) + '</td>' +
+      '<td>' + (entity ? literalValues(index, entity, CSVW + 'propertyUrl').map(function (value) { return '<code>' + esc(value) + '</code>'; }).join('<br>') : '') +
+      (valueUrl ? '<small>value <code>' + esc(valueUrl) + '</code></small>' : '') + (aboutUrl ? '<small>about <code>' + esc(aboutUrl) + '</code></small>' : '') + '</td>' +
+      '<td>' + (about ? esc(about.value) : '') + (flags.length ? '<div class="term-badges">' + flags.join('') + '</div>' : '') + '</td></tr>';
+  }
+  function previewHtml(preview) {
+    if (!preview) return '<p class="view-note">Loading the first rows of the CSV file…</p>';
+    if (preview.error) return '<p class="view-note">The CSV file could not be previewed: ' + esc(preview.error) + '</p>';
+    return '<p class="view-note">' + (preview.complete ? 'All ' + preview.rows.length + ' rows' : 'The first ' + preview.rows.length + ' rows') + ' of the CSV file, as published.</p>' +
+      '<div class="csvw-preview"><table><thead><tr><th>#</th>' + preview.header.map(function (cell) { return '<th>' + esc(cell) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      preview.rows.map(function (row, position) {
+        return '<tr><td>' + (position + 1) + '</td>' + row.map(function (cell) { return '<td>' + esc(cell) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  return {
+    id: 'csvw', title: 'Table', priority: 960,
+    detect: function (index) { var found = csvwTables(index); return { useful: found.length > 0, count: found.length }; },
+    render: function (index, state) {
+      return csvwTables(index).map(function (table, position) {
+        var entity = table.entity;
+        var csvw = state.csvw;
+        var url = csvw ? csvw.resolve(table.url) : table.url;
+        var schema = schemaOf(index, table);
+        var aboutUrl = schema ? literalValues(index, schema, CSVW + 'aboutUrl')[0] : '';
+        var primaryKey = schema ? literalValues(index, schema, CSVW + 'primaryKey') : [];
+        var columns = schema ? index.listValues(schema, CSVW + 'column') : [];
+        // Everything but the CSVW vocabulary itself describes the table
+        var metadata = [entity, table.group].filter(Boolean).map(function (described) {
+          var predicates = [];
+          described.properties.forEach(function (values, predicate) { if (predicate.indexOf(CSVW) !== 0 && predicate !== RDF + 'type') predicates.push(predicate); });
+          return predicates.map(function (predicate) {
+            return '<tr><th>' + esc(index.compact(predicate)) + '</th><td>' + index.values(described, predicate).map(function (term) { return termHtml(index, term); }).join('<br>') + '</td></tr>';
+          }).join('');
+        }).join('');
+        var title = index.values(entity, [DCTERMS + 'title', DC + 'title', RDFS + 'label', 'http://schema.org/name'])[0];
+        return '<section class="csvw-table"' + selectAttr(entity.term) + '><h3>' + esc(title ? title.value : url.split(/[?#]/)[0].split('/').pop()) + '</h3>' +
+          '<p class="term-iri"><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + '</a></p>' +
+          (metadata ? '<table class="entity-table">' + metadata + '</table>' : '') +
+          (csvw ? '<div class="csvw-actions"><button type="button" class="action-button" data-action="csv2rdf" data-csvw-table="' + position + '">CSV2RDF</button><span class="view-note">Converts the CSV file with <a href="https://github.com/rdf-ext/rdf-parser-csvw" target="_blank" rel="noopener">rdf-parser-csvw</a>, one RDF Message per row, 1000 rows at a time.</span></div>' : '') +
+          '<h4>Schema</h4>' +
+          (aboutUrl ? '<p><b>Each row describes</b> <code>' + esc(aboutUrl) + '</code></p>' : '') +
+          (primaryKey.length ? '<p><b>Primary key</b> ' + esc(primaryKey.join(', ')) + '</p>' : '') +
+          (columns.length ? '<div class="csvw-columns"><table><thead><tr><th>#</th><th>Column</th><th>Datatype</th><th>Property</th><th>Description</th></tr></thead><tbody>' + columns.map(function (column, index_) { return columnRow(index, column, index_); }).join('') + '</tbody></table></div>' : '<p class="view-note">The schema lists no columns.</p>') +
+          '<h4>Data</h4>' + (csvw ? previewHtml(csvw.preview(position, table.url, state.refresh)) : '') + '</section>';
+      }).join('');
+    }
+  };
+}
+
 // R2RML/RML triples maps (also untyped ones, recognised by their logical
 // source or subject map) and SSSOM mappings; an RML document also gets a
 // Mermaid overview of how its sources, maps, joins and functions connect
@@ -1510,7 +1607,7 @@ function pipelineModule() {
 
 function createRegistry() {
   return [
-    overviewModule(), profilesModule(), imagesModule(), shaclModule(), formPreviewModule(), credentialsModule(),
+    overviewModule(), csvwModule(), profilesModule(), imagesModule(), shaclModule(), formPreviewModule(), credentialsModule(),
     geographyModule(), timeSeriesModule(), taxonomyModule(), ontologyModule(), temporalModule(), statisticsModule(), mappingsModule(),
     cardsModule('datasets', 'Data catalog', [DCAT + 'Catalog', DCAT + 'Dataset', DCAT + 'Distribution'], [
       { label: 'Publisher', predicates: ['http://purl.org/dc/terms/publisher'] },
@@ -1573,6 +1670,8 @@ function createWorkbench(root, options) {
   var definitionAbort = null;
   // Lets a view re-render once something it computes asynchronously is ready
   state.refresh = schedule;
+  // CSVW previews and conversion, which only the playground itself can do
+  state.csvw = options.csvw || null;
 
   function cleanup() { if (definitionAbort) { definitionAbort.abort(); definitionAbort = null; } if (unmount) { unmount(); unmount = null; } }
 
@@ -1785,6 +1884,10 @@ function createWorkbench(root, options) {
       validateShacl();
       return;
     }
+    if (action && action.dataset.action === 'csv2rdf') {
+      if (options.csvw) options.csvw.convert(Number(action.dataset.csvwTable));
+      return;
+    }
     var loadTarget = event.target.closest('[data-load-url]');
     if (loadTarget) {
       if (options.onLoadUrl) options.onLoadUrl(loadTarget.dataset.loadUrl);
@@ -1916,5 +2019,6 @@ module.exports = {
   createWorkbench: createWorkbench,
   extractTimeSeries: extractTimeSeries,
   expandHydraTemplate: expandHydraTemplate,
+  csvwTables: csvwTables,
   termKey: termKey
 };

@@ -40,6 +40,23 @@ const puppeteer = require('puppeteer-core');
         'ex:knows a owl:ObjectProperty; rdfs:domain ex:Person; rdfs:range ex:Person. ex:name a owl:DatatypeProperty; rdfs:domain ex:Agent; rdfs:range xsd:string.');
       return;
     }
+    if (req.url === '/table.csv-metadata.json') {
+      res.setHeader('Content-Type', 'application/csvm+json');
+      res.end(JSON.stringify({
+        '@context': 'http://www.w3.org/ns/csvw', url: 'table.csv', 'dc:title': 'Fixture table',
+        tableSchema: { aboutUrl: 'https://example.org/thing/{id}', primaryKey: 'id', columns: [
+          { name: 'id', titles: 'id', datatype: 'integer', required: true },
+          { name: 'name', titles: 'name', propertyUrl: 'http://schema.org/name' },
+          { name: 'day', titles: 'day', datatype: 'date', propertyUrl: 'http://schema.org/startDate' }
+        ] }
+      }));
+      return;
+    }
+    if (req.url === '/table.csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.end('id,name,day\n' + Array.from({ length: 2500 }, (_, i) => (i + 1) + ',Thing ' + (i + 1) + ',2026-01-' + String(i % 28 + 1).padStart(2, '0')).join('\n') + '\n');
+      return;
+    }
     if (req.url === '/mapping.rml') {
       res.setHeader('Content-Type', 'text/plain');
       res.end('@prefix rr: <http://www.w3.org/ns/r2rml#>. @prefix rml: <http://semweb.mmlab.be/ns/rml#>. @prefix ql: <http://semweb.mmlab.be/ns/ql#>. @prefix foaf: <http://xmlns.com/foaf/0.1/>. ' +
@@ -419,7 +436,33 @@ const puppeteer = require('puppeteer-core');
     await page.waitForSelector('.rml-overview .mermaid-diagram svg', { timeout: 30000 });
     assert.ok(await page.$eval('.rml-overview svg', el => el.textContent.includes('foaf:name {$.name}')), 'JSONPath references survive Mermaid');
     assert.equal(await page.$$eval('.rml-overview .diagram-link', nodes => nodes.length), 3, 'Both triples maps and their shared source are clickable');
+    // CSV on the Web: the Table view previews the first 1000 rows, and
+    // CSV2RDF streams one RDF Message per row, 1000 at a time
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'table.csv-metadata.json') + '&pane=explore');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.csvw-preview tbody tr', { timeout: 30000 });
+    assert.equal(await page.$eval('.csvw-table h3', el => el.textContent), 'Fixture table');
+    assert.equal(await page.$$eval('.csvw-columns tbody tr', rows => rows.length), 3);
+    assert.equal(await page.$$eval('.csvw-preview tbody tr', rows => rows.length), 1000, 'Only the first 1000 rows are previewed');
+    assert.ok(await page.$eval('.csvw-table', el => el.textContent.includes('The first 1000 rows')));
+    await page.click('[data-action="csv2rdf"]');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused'), { timeout: 30000 });
+    assert.ok(page.url().includes('csv2rdf=1'));
+    assert.equal(await page.$eval('#message-scope', el => el.value), 'window', 'Explore shows the whole window of rows');
+    assert.equal(await page.$eval('#message-position', el => el.textContent), 'message 1 of 1000+', 'A table message, then 999 rows');
+    assert.equal(await page.$eval('#load-more-messages', el => el.hidden), false);
+    await page.waitForFunction(() => document.querySelector('[data-scope-status]').textContent.includes('1000 retained messages'));
+    assert.equal(await page.$('.csvw-table'), null, 'The converted rows are not a CSVW description');
+    await page.click('#load-more-messages');
+    await page.waitForFunction(() => document.querySelector('#message-position').textContent.startsWith('message 1001 of 2000'), { timeout: 30000 });
+    // A shared link converts again once the metadata is loaded, back to
+    // the same row
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused') && document.querySelector('#message-position').textContent.startsWith('message 1001 of'), { timeout: 30000 });
+    await page.goBack();
+    await page.waitForSelector('.csvw-preview tbody tr', { timeout: 30000 });
+    assert.equal(page.url().includes('csv2rdf='), false, 'Back returns to the metadata');
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout, ontology, shape and RML diagrams.');
+    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout, ontology, shape and RML diagrams, CSV on the Web.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

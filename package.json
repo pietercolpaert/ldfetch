@@ -79,6 +79,7 @@
     "maplibre-gl": "^6.7.0",
     "mermaid": "^11.17.2",
     "proj4": "^2.22.0",
+    "rdf-parser-csvw": "^1.1.1",
     "wellknown": "^0.5.0"
   }
 }

@@ -28,6 +28,8 @@ const files = [
   ['dist/main.js.map', 'main.js.map'],
   ['dist/playground.js', 'playground.js'],
   ['dist/playground.js.map', 'playground.js.map'],
+  ['dist/csvw.js', 'csvw.js'],
+  ['dist/csvw.js.map', 'csvw.js.map'],
 ];
 
 for (const [from, to] of files) {

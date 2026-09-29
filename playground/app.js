@@ -252,6 +252,23 @@ var EXAMPLES = {
   'rml-gtfs-de': {
     url: 'https://raw.githubusercontent.com/moin-project/GTFS2RDF/refs/heads/main/rml/gtfsde-rml.ttl'
   },
+  // CSV on the Web metadata: the Table view previews the CSV file each
+  // describes, and converts it with CSV2RDF on request. The UK Central
+  // Digital and Data Office's API catalogue is small, with a subject per
+  // row; the Office for National Statistics' time series are tens of
+  // thousands of rows, all describing one aboutUrl, and served without CORS
+  // headers (the metadata or the CSV file), so they go through the proxy.
+  'csvw-api-catalogue': {
+    url: 'https://raw.githubusercontent.com/co-cddo/api-catalogue/main/data/catalogue.csv-metadata.json'
+  },
+  'csvw-ons-construction': {
+    url: 'https://download.ons.gov.uk/downloads/datasets/output-in-the-construction-industry/editions/time-series/versions/52.csv-metadata.json',
+    proxy: true
+  },
+  'csvw-ons-retail': {
+    url: 'https://download.ons.gov.uk/downloads/datasets/retail-sales-index-large-and-small-businesses/editions/time-series/versions/45.csv-metadata.json',
+    proxy: true
+  },
   'mol-ldes': {
     url: 'https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS.trig'
   },
@@ -352,6 +369,14 @@ document.addEventListener('DOMContentLoaded', function () {
   var streamingMultipleMessages = false;
   var streamingUrl = '';
 
+  // CSV on the Web: the last ordinary document loaded (its CSVW tables get
+  // previewed from it), the table being converted by CSV2RDF (as a 0-based
+  // position among its tables) or the one a restored #csv2rdf= asks for
+  var loadedDocument = null;
+  var csv2rdfTable = null;
+  var pendingCsv2Rdf = null;
+  var csv2rdfSession = 0;
+
   var outputCm = CodeMirror(document.getElementById('output-editor'), {
     mode: 'text/turtle',
     theme: 'pietercolpaert',
@@ -379,8 +404,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var visualizationWorkbench = visualizations.createWorkbench(visualizationRoot, {
     onStateChange: function () { updateHash(); },
     onAvailable: function (count) { document.getElementById('explore-tab').textContent = count ? 'Explore (' + count + ')' : 'Explore'; },
+    csvw: { resolve: resolveCsvwUrl, preview: csvwPreview, convert: function (position) { startCsv2Rdf(position, false); } },
     onLoadUrl: function (url) {
       urlInput.value = url;
+      csv2rdfTable = pendingCsv2Rdf = null;
       restoredMessagePosition = null;
       window.history.pushState(null, '', configurationHash());
       runFetch();
@@ -438,6 +465,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (frameToggle.checked || frameCm.getValue() !== JSON.stringify(DEFAULT_FRAME, null, 2)) {
       params.set('frame', frameCm.getValue());
     }
+    var csv2rdf = csv2rdfTable !== null ? csv2rdfTable : pendingCsv2Rdf;
+    if (csv2rdf !== null) params.set('csv2rdf', String(csv2rdf + 1));
     if (visualizationState.view && visualizationState.view !== 'overview') params.set('view', visualizationState.view);
     if (visualizationState.language) params.set('lang', visualizationState.language);
     if (visualizationState.filter) params.set('filter', visualizationState.filter);
@@ -476,6 +505,7 @@ document.addEventListener('DOMContentLoaded', function () {
     frameToggle.checked = params.get('frameEnabled') === '1';
     if (params.has('frame')) frameCm.setValue(params.get('frame'));
     restoredMessagePosition = params.has('message') ? Math.max(1, parseInt(params.get('message'), 10) || 1) : null;
+    pendingCsv2Rdf = params.has('csv2rdf') ? Math.max(1, parseInt(params.get('csv2rdf'), 10) || 1) - 1 : null;
     advanced.open = params.get('advanced') === '1' || outputFormat.value !== 'trig' || frameToggle.checked || proxyToggle.checked;
     visualizationWorkbench.restoreState({
       view: params.get('view') || '',
@@ -514,6 +544,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // A message number belongs to the previously loaded URL and must not be
     // carried into a different source while the user edits the address.
     restoredMessagePosition = null;
+    csv2rdfTable = pendingCsv2Rdf = null;
     messagesPanel.hidden = true;
     var viewState = visualizationWorkbench.getState();
     viewState.graph = '';
@@ -814,6 +845,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!streamingReader) return Promise.resolve();
       return streamingReader.read().then(function (result) {
         if (result.done) {
+          if (streamingKind === 'csvw') streamingParser.end().forEach(receiveMessage);
           if (streamingKind === 'text') {
             var tailText = streamingDecoder.decode();
             if (tailText) streamingParser.write(tailText).forEach(handleStreamingItem);
@@ -829,6 +861,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (streamingKind === 'text') {
           streamingParser.write(streamingDecoder.decode(result.value, { stream: true })).forEach(handleStreamingItem);
+        } else if (streamingKind === 'csvw') {
+          streamingParser.write(result.value).forEach(receiveMessage);
         }
         return step();
       });
@@ -1107,6 +1141,133 @@ document.addEventListener('DOMContentLoaded', function () {
     return 'npx ldfetch ' + url + formatFlag;
   }
 
+  var csvwPromise = null;
+  function loadCsvw() {
+    if (window.ldfetchCsvw) return Promise.resolve(window.ldfetchCsvw);
+    if (!csvwPromise) csvwPromise = new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+      script.src = 'csvw.js';
+      script.onload = function () { resolve(window.ldfetchCsvw); };
+      script.onerror = function () { csvwPromise = null; reject(new Error('CSV on the Web support could not load.')); };
+      document.head.append(script);
+    });
+    return csvwPromise;
+  }
+
+  // A CSV file is fetched like the document describing it, through the
+  // proxy when that is on, but as a plain GET without an RDF Accept header
+  function fetchCsv(url) {
+    var proxy = proxyToggle.checked ? proxyInput.value.trim() : '';
+    return fetch(proxy + url).then(function (response) {
+      if (!response.ok) throw new Error('Request failed: HTTP ' + response.status + ' for ' + url);
+      return response;
+    });
+  }
+
+  // csvw:url is relative to the metadata document
+  function resolveCsvwUrl(url) {
+    try { return new URL(url, loadedDocument ? loadedDocument.url : urlInput.value.trim()).href; } catch (error) { return url; }
+  }
+
+  function csvwTableAt(documentState, position) {
+    if (!documentState.tables) {
+      var index = new visualizations.DatasetIndex();
+      index.addAll(documentState.quads);
+      documentState.tables = visualizations.csvwTables(index);
+    }
+    return documentState.tables[position] || null;
+  }
+
+  // The first WINDOW_SIZE rows of a table's CSV file, for the Table view:
+  // null while they load (onReady re-renders the view once they are there)
+  function csvwPreview(position, url, onReady) {
+    var documentState = loadedDocument;
+    if (!documentState) return null;
+    var cached = documentState.previews[position];
+    if (cached) return cached.result;
+    cached = documentState.previews[position] = { result: null };
+    var table = csvwTableAt(documentState, position);
+    var csvUrl = resolveCsvwUrl(url);
+    Promise.all([loadCsvw(), fetchCsv(csvUrl)]).then(function (loaded) {
+      return loaded[0].previewRows(loaded[1].body.getReader(), { quads: documentState.quads, table: table.entity.term, url: csvUrl, limit: WINDOW_SIZE });
+    }).then(function (result) {
+      cached.result = result;
+    }, function (error) {
+      cached.result = { error: error && error.message ? error.message : String(error) };
+    }).then(function () {
+      if (loadedDocument === documentState && onReady) onReady();
+    });
+    return null;
+  }
+
+  // Replaces the loaded CSVW metadata with the RDF of the table it
+  // describes, streamed like any large message log: a first message
+  // describing the table, then one message per CSV row, pausing after each
+  // WINDOW_SIZE. Browser Back returns to the metadata.
+  function startCsv2Rdf(position, fromHash) {
+    var documentState = loadedDocument;
+    var table = documentState && csvwTableAt(documentState, position);
+    if (!table) {
+      setStatus('The loaded document describes no CSV table ' + (position + 1) + '.', true);
+      return;
+    }
+    var csvUrl = resolveCsvwUrl(table.url);
+    var session = ++csv2rdfSession;
+    csv2rdfTable = position;
+    resetMessages();
+    visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
+    if (!fromHash) {
+      // One row alone is rarely worth exploring
+      if (messageScope.value === 'current') messageScope.value = 'window';
+      restoredMessagePosition = null;
+      // The Table view describes the metadata, not the converted rows
+      var viewState = visualizationWorkbench.getState();
+      viewState.view = viewState.entity = viewState.graph = '';
+      visualizationWorkbench.restoreState(viewState);
+      window.history.pushState(null, '', configurationHash());
+    }
+    outputCm.setValue('');
+    outputPanel.hidden = true;
+    updateKnownPrefixes({});
+    renderPrefixes({});
+    fetchBtn.disabled = true;
+    streamingUrl = csvUrl;
+    setStatus('Converting ' + csvUrl + ' …');
+    Promise.all([loadCsvw(), fetchCsv(csvUrl)]).then(function (loaded) {
+      if (session !== csv2rdfSession) { loaded[1].body.cancel(); return; }
+      streamingKind = 'csvw';
+      streamingParser = loaded[0].createConverter({ quads: documentState.quads, table: table.entity.term, url: csvUrl });
+      streamingReader = loaded[1].body.getReader();
+      // Even a CSV file with a single row gives a table and a row message
+      streamingMultipleMessages = true;
+      messagesPanel.hidden = false;
+      receiveMessage(streamingParser.tableMessage);
+      codeJsEl.textContent = csv2rdfJsSnippet(documentState.url, csvUrl);
+      codeCliEl.textContent = cliSnippet(documentState.url, null, outputFormat.value);
+      return continueStreaming();
+    }).catch(function (error) {
+      if (session !== csv2rdfSession) return;
+      setStatus('Error: ' + (error && error.message ? error.message : error), true);
+      fetchBtn.disabled = false;
+    });
+  }
+
+  function csv2rdfJsSnippet(metadataUrl, csvUrl) {
+    return [
+      "import ldfetch from 'ldfetch';",
+      "import rdf from 'rdf-ext';",
+      "import CsvwParser from 'rdf-parser-csvw';",
+      "import { Readable } from 'node:stream';",
+      '',
+      '// The CSVW metadata is JSON-LD, so ldfetch reads it like any other RDF',
+      'const metadata = await new ldfetch().get(' + JSON.stringify(metadataUrl) + ');',
+      'const csv = await fetch(' + JSON.stringify(csvUrl) + ');',
+      'const parser = new CsvwParser({ metadata: rdf.dataset(metadata.triples), baseIRI: csv.url });',
+      "parser.import(Readable.fromWeb(csv.body).setEncoding('utf8'))",
+      "  .on('data', (quad) => console.log(quad));"
+    ].join('\n');
+  }
+
   function setStatus(statusText, isError) {
     statusEl.textContent = statusText;
     statusEl.classList.toggle('error', !!isError);
@@ -1139,6 +1300,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function runFetch() {
+    // A restored #csv2rdf= converts once the metadata it needs is loaded
+    csv2rdfTable = null;
+    loadedDocument = null;
+    csv2rdfSession++;
     var url = urlInput.value.trim();
     if (!url) {
       setStatus('Please enter a URL.', true);
@@ -1252,7 +1417,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       if (!hasMessages) {
+        loadedDocument = { url: response.url, quads: response.triples, previews: {} };
         visualizationWorkbench.complete(response.triples, outputPrefixes, 'loaded document');
+        var csv2rdf = pendingCsv2Rdf;
+        pendingCsv2Rdf = null;
+        if (csv2rdf !== null) {
+          startCsv2Rdf(csv2rdf, true);
+          return;
+        }
       }
 
       if (formatName !== 'jsonld') {
@@ -1295,6 +1467,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('more-examples').open = false;
 
     urlInput.value = example.url;
+    csv2rdfTable = pendingCsv2Rdf = null;
     if (example.scope) messageScope.value = example.scope;
     if (example.proxy) {
       proxyToggle.checked = true;
