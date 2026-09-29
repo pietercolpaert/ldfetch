@@ -1,5 +1,6 @@
 'use strict';
 var geospatial = require('./geospatial');
+var diagrams = require('./diagrams');
 
 var RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 var RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
@@ -34,6 +35,9 @@ var RML = 'http://semweb.mmlab.be/ns/rml#';
 var RR = 'http://www.w3.org/ns/r2rml#';
 var SSSOM = 'https://w3id.org/sssom/';
 var ORG = 'http://www.w3.org/ns/org#';
+var DCTERMS = 'http://purl.org/dc/terms/';
+var DC = 'http://purl.org/dc/elements/1.1/';
+var VANN = 'http://purl.org/vocab/vann/';
 
 var LABELS = [
   SCHEMA[0] + 'name', SCHEMA[1] + 'name', FOAF + 'name', VCARD + 'fn',
@@ -439,7 +443,7 @@ function shaclModule() {
     render: function (index, state) {
       var found = shapes(index);
       var nodeShapes = found.filter(function (shape) { return index.hasType(shape, SH + 'NodeShape') || index.values(shape, [SH + 'targetClass', SH + 'targetNode', SH + 'property']).length; });
-      var diagrams = nodeShapes.map(function (shape) {
+      var flows = nodeShapes.map(function (shape) {
         var propertyShapes = index.values(shape, SH + 'property');
         return '<div class="shape-flow">' + (shape.term.termType === 'NamedNode' ? '<button type="button" class="shape-node main" data-entity="' + esc(termKey(shape.term)) + '">' + esc(index.label(shape)) + '</button>' : '<span class="shape-node main">' + esc(blankNodeId(shape.term)) + '</span>') +
           (propertyShapes.length ? '<div class="shape-branches">' + propertyShapes.map(function (propertyTerm) {
@@ -448,6 +452,19 @@ function shaclModule() {
             return '<div><span>' + esc(path ? index.compact(path.value) : 'property') + '</span>' + (propertyTerm.termType === 'NamedNode' ? '<button type="button" class="shape-node" data-entity="' + esc(termKey(propertyTerm)) + '">' + esc(index.label(propertyTerm)) + '</button>' : '<span class="shape-node">' + esc(blankNodeId(propertyTerm)) + '</span>') + '</div>';
           }).join('') + '</div>' : '') + '</div>';
       }).join('');
+      // The shapes as extract-cbd-shape's member extraction follows them,
+      // drawn by its own Mermaid rendering; the simple flow above stands in
+      // while that computes, or when it cannot be computed
+      var topology = diagrams.shapeTopologyFor(index, state.refresh);
+      if (topology && topology.length) {
+        flows = '<section class="shape-topology"><h3>Shape topology</h3><p class="view-note">How <a href="https://github.com/TREEcg/extract-cbd-shape" target="_blank" rel="noopener">extract-cbd-shape</a> follows these shapes to extract a member: circles are node shapes, solid arrows required paths (<code>sh:minCount</code> &gt; 0), dotted arrows optional ones, and OR alternatives from <code>sh:or</code>/<code>sh:xone</code>.</p>' +
+          topology.map(function (item) {
+            return '<figure><figcaption>' + termHtml(index, item.shape) + '</figcaption>' +
+              (item.error ? '<p class="view-note">No topology: ' + esc(item.error) + '</p>' : diagrams.diagramHtml(item.source, null, 'Shape topology of ' + index.label(item.shape))) + '</figure>';
+          }).join('') + '</section>';
+      } else if (topology && topology.error) {
+        flows = '<p class="view-note">The shape topology could not be computed: ' + esc(topology.error) + '</p>' + flows;
+      }
       var cards = found.map(function (shape) {
         var target = index.values(shape, [SH + 'targetClass', SH + 'targetNode']).map(function (term) { return termHtml(index, term); }).join(', ');
         var path = index.values(shape, SH + 'path').map(function (term) { return termHtml(index, term); }).join(', ');
@@ -463,7 +480,7 @@ function shaclModule() {
       }).join('');
       return '<div class="view-actions"><button type="button" class="action-button" data-action="validate-shacl">Validate loaded data</button><a class="action-button secondary" href="https://playground.rdf-ext.org/shacl/" target="_blank" rel="noopener">Open online validator</a><a href="https://shacl-playground.zazuko.com/" target="_blank" rel="noopener">Alternative validator</a></div>' +
         '<p class="view-note">The local validation uses the entire loaded document as both data and shapes graph. Results describe the current loaded snapshot.</p>' +
-        (state.validationHtml || '<div class="validation-result" data-validation-result></div>') + diagrams + '<div class="shape-grid">' + cards + '</div>';
+        (state.validationHtml || '<div class="validation-result" data-validation-result></div>') + flows + '<div class="shape-grid">' + cards + '</div>';
     }
   };
 }
@@ -688,23 +705,105 @@ function taxonomyModule() {
   };
 }
 
+// Modelled on the documentation Widoco generates for an ontology
+// (https://dgarijo.github.io/Widoco/): the ontology's metadata, an overview
+// diagram -- a Mermaid class diagram rather than WebVOWL's force layout --
+// a term index per kind of term, and a cross-reference card per term.
 function ontologyModule() {
-  var types = [RDFS + 'Class', OWL + 'Class', RDF + 'Property', OWL + 'ObjectProperty', OWL + 'DatatypeProperty', OWL + 'AnnotationProperty'];
-  function terms(index) { return index.entitiesOfType(types); }
+  var GROUPS = [
+    { title: 'Classes', kind: 'Class', types: [RDFS + 'Class', OWL + 'Class'] },
+    { title: 'Object properties', kind: 'Object property', types: [OWL + 'ObjectProperty'] },
+    { title: 'Datatype properties', kind: 'Datatype property', types: [OWL + 'DatatypeProperty'] },
+    { title: 'Annotation properties', kind: 'Annotation property', types: [OWL + 'AnnotationProperty'] },
+    { title: 'Other properties', kind: 'Property', types: [RDF + 'Property'] },
+    { title: 'Named individuals', kind: 'Named individual', types: [OWL + 'NamedIndividual'] }
+  ];
+  var KIND_TYPES = [].concat.apply([], GROUPS.map(function (group) { return group.types; }));
+  var METADATA = [
+    ['Version', [OWL + 'versionInfo']], ['Version IRI', [OWL + 'versionIRI']], ['Prior version', [OWL + 'priorVersion']],
+    ['Backward compatible with', [OWL + 'backwardCompatibleWith']], ['Incompatible with', [OWL + 'incompatibleWith']],
+    ['Imports', [OWL + 'imports']], ['Creators', [DCTERMS + 'creator', DC + 'creator', SCHEMA[0] + 'creator', SCHEMA[1] + 'creator', FOAF + 'maker']],
+    ['Contributors', [DCTERMS + 'contributor', DC + 'contributor', SCHEMA[0] + 'contributor', SCHEMA[1] + 'contributor']],
+    ['Publisher', [DCTERMS + 'publisher', DC + 'publisher', SCHEMA[0] + 'publisher', SCHEMA[1] + 'publisher']],
+    ['Created', [DCTERMS + 'created', SCHEMA[0] + 'dateCreated', SCHEMA[1] + 'dateCreated']], ['Issued', [DCTERMS + 'issued']],
+    ['Modified', [DCTERMS + 'modified', SCHEMA[0] + 'dateModified', SCHEMA[1] + 'dateModified']],
+    ['License', [DCTERMS + 'license', 'http://creativecommons.org/ns#license', SCHEMA[0] + 'license', SCHEMA[1] + 'license']],
+    ['Rights', [DCTERMS + 'rights', DC + 'rights']],
+    ['Preferred prefix', [VANN + 'preferredNamespacePrefix']], ['Namespace', [VANN + 'preferredNamespaceUri']],
+    ['Cite as', [DCTERMS + 'bibliographicCitation']], ['See also', [RDFS + 'seeAlso']]
+  ];
+  var DESCRIPTIONS = [DCTERMS + 'abstract', DCTERMS + 'description', DC + 'description', SKOS + 'definition', RDFS + 'comment'];
+  function terms(index) { return index.entitiesOfType(KIND_TYPES); }
+  function byLabel(index) { return function (a, b) { return index.label(a).localeCompare(index.label(b)); }; }
+  function incoming(index, entity, predicate) {
+    return uniqueTerms((index.incoming.get(termKey(entity.term)) || []).filter(function (quad) { return quad.predicate.value === predicate; }).map(function (quad) { return quad.subject; }));
+  }
+  function row(index, title, values, limit) {
+    if (!values.length) return '';
+    var shown = values.slice(0, limit || 12).map(function (term) { return termHtml(index, term); }).join(', ');
+    return '<p><b>' + esc(title) + '</b> ' + shown + (values.length > (limit || 12) ? ' <small>and ' + (values.length - (limit || 12)) + ' more</small>' : '') + '</p>';
+  }
+  function description(index, entity) {
+    var value = firstValue(index, entity, DESCRIPTIONS);
+    return value ? '<p class="term-description">' + esc(value) + '</p>' : '';
+  }
+  function metadataHtml(index, ontology) {
+    var rows = METADATA.map(function (field) {
+      var values = index.values(ontology, field[1]);
+      return values.length ? '<tr><th>' + esc(field[0]) + '</th><td>' + values.map(function (term) { return termHtml(index, term); }).join('<br>') + '</td></tr>' : '';
+    }).join('');
+    return '<section class="ontology-metadata"' + selectAttr(ontology.term) + '><h3>' + esc(index.label(ontology)) + '</h3>' +
+      (ontology.term.termType === 'NamedNode' ? '<p class="term-iri">' + esc(ontology.term.value) + '</p>' : '') + description(index, ontology) +
+      (rows ? '<table class="entity-table">' + rows + '</table>' : '') + '</section>';
+  }
+  function termCard(index, entity) {
+    var isClass = index.hasType(entity, GROUPS[0].types);
+    var kinds = GROUPS.filter(function (group) { return index.hasType(entity, group.types); }).map(function (group) { return group.kind; });
+    var characteristics = index.values(entity, RDF + 'type').filter(function (type) { return KIND_TYPES.indexOf(type.value) === -1; }).map(function (type) { return index.compact(type.value); });
+    var deprecated = index.values(entity, OWL + 'deprecated').some(function (term) { return term.value === 'true' || term.value === '1'; });
+    return '<article' + selectAttr(entity.term) + '><h3>' + esc(index.label(entity)) + '</h3>' +
+      '<div class="term-badges">' + kinds.map(function (kind) { return '<span>' + esc(kind) + '</span>'; }).join('') +
+      characteristics.map(function (type) { return '<span>' + esc(type) + '</span>'; }).join('') + (deprecated ? '<span class="deprecated">deprecated</span>' : '') + '</div>' +
+      (entity.term.termType === 'NamedNode' ? '<p class="term-iri">' + esc(entity.term.value) + '</p>' : '') + description(index, entity) +
+      row(index, isClass ? 'Superclasses' : 'Superproperties', index.values(entity, [RDFS + 'subClassOf', RDFS + 'subPropertyOf'])) +
+      row(index, isClass ? 'Subclasses' : 'Subproperties', incoming(index, entity, RDFS + 'subClassOf').concat(incoming(index, entity, RDFS + 'subPropertyOf'))) +
+      row(index, 'Equivalent to', index.values(entity, [OWL + 'equivalentClass', OWL + 'equivalentProperty'])) +
+      row(index, 'Disjoint with', index.values(entity, [OWL + 'disjointWith', OWL + 'propertyDisjointWith'])) +
+      row(index, 'Inverse of', index.values(entity, OWL + 'inverseOf').concat(incoming(index, entity, OWL + 'inverseOf'))) +
+      row(index, 'Domain', index.values(entity, RDFS + 'domain')) +
+      row(index, 'Range', index.values(entity, RDFS + 'range')) +
+      row(index, 'In domain of', incoming(index, entity, RDFS + 'domain')) +
+      row(index, 'In range of', incoming(index, entity, RDFS + 'range')) +
+      (isClass ? row(index, 'Instances', incoming(index, entity, RDF + 'type'), 8) : '') + '</article>';
+  }
   return {
     id: 'ontology', title: 'Ontology', priority: 770,
-    detect: function (index) { var found = terms(index); return { useful: found.length > 0, count: found.length }; },
+    detect: function (index) {
+      var found = terms(index).filter(function (entity) { return !index.hasType(entity, OWL + 'NamedIndividual') || index.hasType(entity, KIND_TYPES.slice(0, -1)); });
+      return { useful: found.length > 0, count: found.length };
+    },
     render: function (index, state) {
-      var found = terms(index).filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; });
-      return '<div class="ontology-list">' + found.map(function (entity) {
-        var parents = index.values(entity, [RDFS + 'subClassOf', RDFS + 'subPropertyOf', OWL + 'equivalentClass', OWL + 'equivalentProperty']);
-        var domain = index.values(entity, RDFS + 'domain');
-        var range = index.values(entity, RDFS + 'range');
-        return '<article' + selectAttr(entity.term) + '><h3>' + esc(index.label(entity)) + '</h3>' +
-          (parents.length ? '<p><b>Extends/equivalent</b> ' + parents.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
-          (domain.length ? '<p><b>Domain</b> ' + domain.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
-          (range.length ? '<p><b>Range</b> ' + range.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
-      }).join('') + '</div>';
+      var all = terms(index);
+      var ontologies = index.entitiesOfType(OWL + 'Ontology');
+      var diagram = diagrams.ontologyDiagram(index, termKey);
+      var termIndex = GROUPS.map(function (group, position) {
+        var members = all.filter(function (entity) {
+          // A term is listed under the first kind it has, e.g. an
+          // owl:ObjectProperty that is also an rdf:Property only once
+          return index.hasType(entity, group.types) && !GROUPS.slice(0, position).some(function (earlier) { return index.hasType(entity, earlier.types); });
+        }).sort(byLabel(index));
+        return members.length ? '<section><h4>' + esc(group.title) + ' <small>' + members.length + '</small></h4><div class="term-index">' + members.map(function (entity) {
+          return entity.term.termType === 'NamedNode' ? '<button type="button" data-entity="' + esc(termKey(entity.term)) + '">' + esc(index.label(entity)) + '</button>' : '';
+        }).join('') + '</div></section>' : '';
+      }).join('');
+      var found = all.filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; }).sort(byLabel(index));
+      return ontologies.map(function (ontology) { return metadataHtml(index, ontology); }).join('') +
+        (diagram ? '<section class="ontology-overview"><h3>Overview</h3>' +
+          (diagram.truncated ? '<p class="view-note">Showing the first ' + diagram.shown + ' of ' + diagram.total + ' classes.</p>' : '') +
+          diagrams.diagramHtml(diagram.source, diagram.links, 'Class diagram of the loaded ontology') +
+          '<p class="view-note">Solid arrows with a hollow head point to a superclass; labelled arrows are object properties from their domain to their range. Datatype properties are listed inside their domain. Click a class to inspect it.</p></section>' : '') +
+        '<section class="ontology-index"><h3>Terms</h3>' + termIndex + '</section>' +
+        '<div class="ontology-list">' + found.map(function (entity) { return termCard(index, entity); }).join('') + '</div>';
     }
   };
 }
@@ -1449,6 +1548,8 @@ function createWorkbench(root, options) {
   var visible = false;
   var unmount = null;
   var definitionAbort = null;
+  // Lets a view re-render once something it computes asynchronously is ready
+  state.refresh = schedule;
 
   function cleanup() { if (definitionAbort) { definitionAbort.abort(); definitionAbort = null; } if (unmount) { unmount(); unmount = null; } }
 
@@ -1532,6 +1633,7 @@ function createWorkbench(root, options) {
         body.replaceChildren.apply(body, Array.from(updated.childNodes));
         unmount.update(state.mapData);
       } else body.innerHTML = html;
+      diagrams.renderDiagrams(body, selectEntity);
       if (active.module.id === 'map' && !retainedGlobe) {
         var removeMap = geospatial.mount(body.querySelector('[data-globe]'), state.mapData, function (entity) {
           selectEntity(entity);

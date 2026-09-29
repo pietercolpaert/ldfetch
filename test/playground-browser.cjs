@@ -32,6 +32,14 @@ const puppeteer = require('puppeteer-core');
   let riverbenchStreamingAccept;
   let ordinaryGzipRequests = 0;
   const server = http.createServer((req, res) => {
+    if (req.url === '/ontology.ttl') {
+      res.setHeader('Content-Type', 'text/turtle');
+      res.end('@prefix owl: <http://www.w3.org/2002/07/owl#>. @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>. @prefix xsd: <http://www.w3.org/2001/XMLSchema#>. @prefix ex: <https://example.org/onto#>. ' +
+        '<https://example.org/onto> a owl:Ontology; rdfs:label "Diagram ontology"; owl:versionInfo "1.0". ' +
+        'ex:Agent a owl:Class; rdfs:label "Agent". ex:Person a owl:Class; rdfs:label "Person"; rdfs:subClassOf ex:Agent. ' +
+        'ex:knows a owl:ObjectProperty; rdfs:domain ex:Person; rdfs:range ex:Person. ex:name a owl:DatatypeProperty; rdfs:domain ex:Agent; rdfs:range xsd:string.');
+      return;
+    }
     if (req.url === '/prefixes.trig') {
       res.setHeader('Content-Type', 'application/trig');
       res.end('VERSION "1.2-messages"\nPREFIX schema: <http://schema.org/>\nPREFIX custom: <https://example.org/custom/>\ncustom:alice schema:name "Alice" .');
@@ -379,7 +387,21 @@ const puppeteer = require('puppeteer-core');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     assert.equal(await page.$eval('#messages-panel', el => el.hidden), false);
     assert.equal(await page.$eval('#message-slider', el => el.max), '1');
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'ontology.ttl') + '&pane=explore');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    await page.evaluate(() => document.querySelector('[data-view="ontology"]').click());
+    await page.waitForSelector('.ontology-overview .mermaid-diagram svg', { timeout: 30000 });
+    assert.ok(await page.$eval('.ontology-metadata', el => el.textContent.includes('Diagram ontology') && el.textContent.includes('1.0')));
+    assert.equal(await page.$$eval('.ontology-overview .diagram-link', nodes => nodes.length), 2, 'Both classes are drawn and clickable');
+    await page.evaluate(() => document.querySelectorAll('.ontology-overview .diagram-link')[1].dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await page.waitForFunction(() => document.querySelector('[data-entity-details] h3')?.textContent === 'Person');
+    assert.ok(await page.$eval('.ontology-list', el => el.textContent.includes('In domain of')));
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/shacl-ui-showcase.ttl') + '&pane=explore');
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
+    await page.evaluate(() => document.querySelector('[data-view="shapes"]').click());
+    await page.waitForSelector('.shape-topology .mermaid-diagram svg', { timeout: 30000 });
+    assert.ok(await page.$$eval('.shape-topology figure', figures => figures.length) > 1, 'One extract-cbd-shape topology per root shape');
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout.');
+    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout, ontology and shape diagrams.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

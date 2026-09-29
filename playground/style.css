@@ -682,6 +682,31 @@ button {
 }
 .ontology-list h3, .chart-list h3 { margin: 0 0 0.5rem; color: var(--primary); }
 .ontology-list p { margin: 0.3rem 0; font-size: 0.82rem; }
+.ontology-list .term-description { color: #34485c; }
+.term-iri { margin: 0.2rem 0 0.4rem; color: #627487; font-family: var(--font-mono); font-size: 0.72rem; overflow-wrap: anywhere; }
+.term-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.3rem; }
+.term-badges span { padding: 0.1rem 0.45rem; border-radius: 999px; background: #edf3f8; color: #3b5670; font-size: 0.7rem; }
+.term-badges .deprecated { background: #fff1ec; color: #9b3e29; }
+.ontology-metadata, .ontology-overview, .ontology-index, .shape-topology {
+  margin: 0 0 1rem;
+  padding: 0.85rem;
+  border: 1px solid #dfe6ee;
+  border-radius: 8px;
+  background: white;
+}
+.ontology-metadata h3, .ontology-overview h3, .ontology-index h3, .shape-topology h3 { margin: 0 0 0.5rem; color: var(--primary); }
+.ontology-metadata .entity-table th { width: 12rem; }
+.ontology-index h4 { margin: 0.6rem 0 0.35rem; font-size: 0.8rem; }
+.ontology-index h4 small { color: #627487; font-weight: 400; }
+.term-index { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.term-index button { border: 1px solid #cfdae5; border-radius: 6px; background: #f8fbfe; color: var(--primary); padding: 0.2rem 0.5rem; font-size: 0.75rem; cursor: pointer; }
+.term-index button:hover, .term-index button:focus-visible { border-color: var(--accent); background: #fffaf1; }
+.shape-topology figure { margin: 0.8rem 0 0; }
+.shape-topology figcaption { margin-bottom: 0.3rem; font-size: 0.8rem; font-weight: 700; }
+.mermaid-diagram { overflow-x: auto; }
+.mermaid-diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.mermaid-diagram .diagram-link { cursor: pointer; }
+.mermaid-diagram .diagram-link:hover rect, .mermaid-diagram .diagram-link:focus-visible rect { stroke: var(--accent) !important; stroke-width: 2px !important; }
 
 .time-series-list, .hypermedia-list { display: grid; gap: .8rem; }
 .time-series-list > section, .hypermedia-list > article {
