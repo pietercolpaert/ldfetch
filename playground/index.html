@@ -41,7 +41,6 @@
         <div class="example-menu">
           <section><h3>Linked data basics</h3>
             <button type="button" class="example-chip" data-example="wikidata-sparql">SPARQL CONSTRUCT</button>
-            <button type="button" class="example-chip" data-example="jelly">Jelly-RDF</button>
             <button type="button" class="example-chip" data-example="rdf-messages">RDF Message Log</button>
             <button type="button" class="example-chip" data-example="rdf-messages-large">Large Message Log</button>
           </section>
@@ -72,6 +71,14 @@
           <section><h3>Data pipelines</h3>
             <button type="button" class="example-chip" data-example="rdf-connect-pipeline">RDF-Connect pipeline</button>
           </section>
+          <section><h3>RML mappings</h3>
+            <button type="button" class="example-chip" data-example="rml-roman-emperors">Roman emperors</button>
+            <button type="button" class="example-chip" data-example="rml-opencitations">OpenCitations bibliographic metadata</button>
+            <button type="button" class="example-chip" data-example="rml-smart-hotel">Smart hotel IoT</button>
+            <button type="button" class="example-chip" data-example="rml-automationml">AutomationML to OWL</button>
+            <button type="button" class="example-chip" data-example="rml-gtfs-xml">GTFS-Madrid-Bench (XML)</button>
+            <button type="button" class="example-chip" data-example="rml-gtfs-de">GTFS Germany</button>
+          </section>
           <section><h3>Hypermedia controls</h3>
             <button type="button" class="example-chip" data-example="mol-ldes">Mol waterways LDES</button>
             <button type="button" class="example-chip" data-example="kbo-ldes">Belgian company LDES</button>
@@ -80,11 +87,7 @@
             <button type="button" class="example-chip" data-example="lov-tpf">Linked Open Vocabularies TPF</button>
             <button type="button" class="example-chip" data-example="ugent-biblio-tpf">UGent bibliography TPF</button>
           </section>
-          <section><h3>Time series</h3>
-            <button type="button" class="example-chip" data-example="mol-tss">Mol RDF TSS readings</button>
-            <button type="button" class="example-chip" data-example="riverbench-weather">RiverBench weather sample</button>
-          </section>
-          <section><h3>RiverBench Jelly archives</h3>
+          <section><h3>RiverBench</h3>
             <button type="button" class="example-chip" data-example="riverbench-jelly-assist-iot-weather">ASSIST-IoT weather</button>
             <button type="button" class="example-chip" data-example="riverbench-jelly-assist-iot-weather-graphs">ASSIST-IoT weather graphs</button>
             <button type="button" class="example-chip" data-example="riverbench-jelly-citypulse-traffic">CityPulse traffic</button>
@@ -199,7 +202,7 @@
     </div>
     <div class="explore-navigation">
       <div class="view-tabs" role="tablist" aria-label="Recommended visualizations" data-view-tabs></div>
-      <details class="more-views"><summary aria-label="More visualizations">…</summary><div data-more-views></div></details>
+      <details class="more-views"><summary title="More visualizations">More...</summary><div data-more-views></div></details>
     </div>
     <div class="view-body" role="tabpanel" data-view-body></div>
     <details class="entity-inspector" data-entity-inspector>

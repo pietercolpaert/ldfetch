@@ -33,6 +33,7 @@ var IIIF = 'http://iiif.io/api/presentation/3#';
 var AS = 'http://www.w3.org/ns/activitystreams#';
 var RML = 'http://semweb.mmlab.be/ns/rml#';
 var RR = 'http://www.w3.org/ns/r2rml#';
+var RMLC = 'http://w3id.org/rml/';
 var SSSOM = 'https://w3id.org/sssom/';
 var ORG = 'http://www.w3.org/ns/org#';
 var DCTERMS = 'http://purl.org/dc/terms/';
@@ -1000,15 +1001,34 @@ function iiifModule() {
   };
 }
 
+// R2RML/RML triples maps (also untyped ones, recognised by their logical
+// source or subject map) and SSSOM mappings; an RML document also gets a
+// Mermaid overview of how its sources, maps, joins and functions connect
 function mappingsModule() {
-  var types = [RR + 'TriplesMap', RML + 'TriplesMap', SSSOM + 'Mapping'];
-  return cardsModule('mappings', 'Mappings', types, [
-    { label: 'Logical source', predicates: [RML + 'logicalSource', RR + 'logicalTable'] },
-    { label: 'Subject map', predicates: [RR + 'subjectMap'] },
+  var types = [RR + 'TriplesMap', RML + 'TriplesMap', RMLC + 'TriplesMap', SSSOM + 'Mapping'];
+  var cards = cardsModule('mappings', 'Mappings', types, [
+    { label: 'Logical source', predicates: [RML + 'logicalSource', RMLC + 'logicalSource', RR + 'logicalTable'] },
+    { label: 'Subject map', predicates: [RR + 'subjectMap', RMLC + 'subjectMap'] },
     { label: 'Source', predicates: [SSSOM + 'subject_id'] },
     { label: 'Target', predicates: [SSSOM + 'object_id'] },
     { label: 'Predicate', predicates: [SSSOM + 'predicate_id'] }
-  ], 705);
+  ], 905, function (index) {
+    return uniqueEntities(diagrams.rmlTriplesMaps(index).concat(index.entitiesOfType(SSSOM + 'Mapping')));
+  });
+  var renderCards = cards.render;
+  cards.render = function (index, state) {
+    var diagram = diagrams.rmlDiagram(index, termKey);
+    return (diagram ? '<section class="rml-overview"><h3>Overview</h3>' +
+      (diagram.truncated ? '<p class="view-note">Showing the first ' + diagram.shown + ' of ' + diagram.total + ' triples maps.</p>' : '') +
+      diagrams.diagramHtml(diagram.source, diagram.links, 'Class diagram of the loaded mapping') +
+      '<p class="view-note">Each triples map lists the subject it generates, its classes, and one line per predicate-object map: <code>{…}</code> is a reference, and <code>ƒ</code> a function call. Dashed arrows point from what feeds a map, a logical source or a function; solid arrows are joins to a parent triples map, with their join conditions. Click a node to inspect it.</p></section>' : '') +
+      renderCards(index, state);
+  };
+  return cards;
+}
+
+function uniqueEntities(entities) {
+  return entities.filter(function (entity, position) { return entities.indexOf(entity) === position; });
 }
 
 function datasetProfileModule() {
@@ -1067,12 +1087,15 @@ function relationshipModule() {
   };
 }
 
-function cardsModule(id, title, types, fields, priority) {
+// find(index) lists the entities to show, by default everything of one of
+// the types
+function cardsModule(id, title, types, fields, priority, find) {
+  find = find || function (index) { return index.entitiesOfType(types); };
   return {
     id: id, title: title, priority: priority,
-    detect: function (index) { var found = index.entitiesOfType(types); return { useful: found.length > 0, count: found.length }; },
+    detect: function (index) { var found = find(index); return { useful: found.length > 0, count: found.length }; },
     render: function (index, state) {
-      var found = index.entitiesOfType(types).filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; });
+      var found = find(index).filter(function (entity) { return !state.filter || index.searchable(entity).indexOf(state.filter.toLowerCase()) !== -1; });
       return '<div class="domain-card-grid">' + found.map(function (entity) {
         var rows = fields.map(function (field) {
           var values = index.values(entity, field.predicates);

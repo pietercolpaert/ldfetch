@@ -40,6 +40,15 @@ const puppeteer = require('puppeteer-core');
         'ex:knows a owl:ObjectProperty; rdfs:domain ex:Person; rdfs:range ex:Person. ex:name a owl:DatatypeProperty; rdfs:domain ex:Agent; rdfs:range xsd:string.');
       return;
     }
+    if (req.url === '/mapping.rml') {
+      res.setHeader('Content-Type', 'text/plain');
+      res.end('@prefix rr: <http://www.w3.org/ns/r2rml#>. @prefix rml: <http://semweb.mmlab.be/ns/rml#>. @prefix ql: <http://semweb.mmlab.be/ns/ql#>. @prefix foaf: <http://xmlns.com/foaf/0.1/>. ' +
+        '<#Person> rml:logicalSource [ rml:source "people.json"; rml:iterator "$.[*]"; rml:referenceFormulation ql:JSONPath ]; ' +
+        'rr:subjectMap [ rr:template "https://example.org/person/{id}"; rr:class foaf:Person ]; ' +
+        'rr:predicateObjectMap [ rr:predicate foaf:name; rr:objectMap [ rml:reference "$.name" ] ], [ rr:predicate foaf:based_near; rr:objectMap [ rr:parentTriplesMap <#City> ] ]. ' +
+        '<#City> rml:logicalSource [ rml:source "people.json"; rml:iterator "$.[*]"; rml:referenceFormulation ql:JSONPath ]; rr:subjectMap [ rr:template "https://example.org/city/{city}" ].');
+      return;
+    }
     if (req.url === '/prefixes.trig') {
       res.setHeader('Content-Type', 'application/trig');
       res.end('VERSION "1.2-messages"\nPREFIX schema: <http://schema.org/>\nPREFIX custom: <https://example.org/custom/>\ncustom:alice schema:name "Alice" .');
@@ -150,9 +159,14 @@ const puppeteer = require('puppeteer-core');
       return Array.from(identity.querySelectorAll('.example-chip'), button => button.textContent);
     }), ['Pieter Heyvaert', 'Ruben Taelman', 'Patrick Hochstenbach', 'ORCID Profile']);
     assert.ok(await page.$('[data-example="mol-ldes"]'));
-    assert.ok(await page.$('[data-example="riverbench-weather"]'));
+    assert.equal(await page.$('[data-example="mol-tss"]'), null);
+    assert.equal(await page.$('[data-example="jelly"]'), null);
     assert.deepEqual(await page.$$eval('.example-menu section', sections => {
-      const riverBench = sections.find(section => section.querySelector('h3')?.textContent === 'RiverBench Jelly archives');
+      const rml = sections.find(section => section.querySelector('h3')?.textContent === 'RML mappings');
+      return Array.from(rml.querySelectorAll('.example-chip'), button => button.dataset.example);
+    }), ['rml-roman-emperors', 'rml-opencitations', 'rml-smart-hotel', 'rml-automationml', 'rml-gtfs-xml', 'rml-gtfs-de']);
+    assert.deepEqual(await page.$$eval('.example-menu section', sections => {
+      const riverBench = sections.find(section => section.querySelector('h3')?.textContent === 'RiverBench');
       return Array.from(riverBench.querySelectorAll('.example-chip'), button => button.dataset.example);
     }), [
       'riverbench-jelly-assist-iot-weather',
@@ -251,8 +265,8 @@ const puppeteer = require('puppeteer-core');
     await page.waitForSelector('.time-series-point[data-point-id="stage-1215"]');
     assert.equal(await page.$eval('.time-series-point[data-point-id="stage-1215"]', el => el.dataset.value), '29.66');
     assert.ok(await page.$eval('.time-series-point[data-point-id="stage-1215"] title', el => el.textContent.includes('2020-11-07T12:15:00')));
-    await page.click('#more-examples > summary');
-    await page.click('[data-example="riverbench-weather"]');
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/riverbench-weather-sample.trig') + '&pane=explore&view=timeseries&scope=memory');
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelector('#status').textContent.includes('riverbench-weather-sample.trig'));
     await page.waitForSelector('.time-series-point');
     assert.equal(await page.$eval('#message-scope', el => el.value), 'memory');
@@ -400,7 +414,12 @@ const puppeteer = require('puppeteer-core');
     await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/shacl-ui-showcase.ttl') + '&pane=explore&view=shapes');
     await page.waitForSelector('.shape-topology .mermaid-diagram svg', { timeout: 30000 });
     assert.ok(await page.$$eval('.shape-topology figure', figures => figures.length) > 1, 'One extract-cbd-shape topology per root shape');
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'mapping.rml') + '&pane=explore');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.rml-overview .mermaid-diagram svg', { timeout: 30000 });
+    assert.ok(await page.$eval('.rml-overview svg', el => el.textContent.includes('foaf:name {$.name}')), 'JSONPath references survive Mermaid');
+    assert.equal(await page.$$eval('.rml-overview .diagram-link', nodes => nodes.length), 3, 'Both triples maps and their shared source are clickable');
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout, ontology and shape diagrams.');
+    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout, ontology, shape and RML diagrams.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

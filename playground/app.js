@@ -114,9 +114,6 @@ var EXAMPLES = {
   'patrick-hochstenbach': {
     url: 'https://patrickhochstenbach.net/profile/card#me'
   },
-  jelly: {
-    url: 'https://raw.githubusercontent.com/pietercolpaert/rdfjs-jelly/main/example/osm-dk-10k.jelly.gz'
-  },
   'rdf-messages': {
     // ldfetch expects absolute http(s) URLs, so resolve this against the
     // page's own location rather than using a bare relative path.
@@ -232,6 +229,29 @@ var EXAMPLES = {
   'rdf-connect-pipeline': {
     url: 'https://raw.githubusercontent.com/rdf-connect/RDF-Connect-RINF-LDES/refs/heads/main/generation-pipeline/rdfc-pipeline.ttl'
   },
+  // RML mapping documents, ordered from tiny to huge: a compact JSON
+  // example, a CSV mapping using FnML/FnO functions, a JSON mapping with
+  // JSONPath filters and rr:parentTriplesMap joins, a large XPath-based
+  // AutomationML-to-OWL mapping, and two GTFS mappings. All served as
+  // text/plain by GitHub, so these rely on the .ttl/.rml extension fallback.
+  'rml-roman-emperors': {
+    url: 'https://raw.githubusercontent.com/benj-moreau/RML_Example/master/roman-emperors.rml'
+  },
+  'rml-opencitations': {
+    url: 'https://raw.githubusercontent.com/arcangelo7/rml-mapping/main/rules.rml.ttl'
+  },
+  'rml-smart-hotel': {
+    url: 'https://gist.githubusercontent.com/djs0109/bea004feb28498bef8ec859186387a60/raw/4b950d6e3096485adbaf6f784825b60fa18c9ffa/mapping.ttl'
+  },
+  'rml-automationml': {
+    url: 'https://raw.githubusercontent.com/hsu-aut/aml2owl/master/lib/src/main/resources/aml2rdf.ttl'
+  },
+  'rml-gtfs-xml': {
+    url: 'https://raw.githubusercontent.com/oeg-upm/gtfs-bench/refs/heads/master/mappings/gtfs-xml.rml.ttl'
+  },
+  'rml-gtfs-de': {
+    url: 'https://raw.githubusercontent.com/moin-project/GTFS2RDF/refs/heads/main/rml/gtfsde-rml.ttl'
+  },
   'mol-ldes': {
     url: 'https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS.trig'
   },
@@ -249,13 +269,6 @@ var EXAMPLES = {
   },
   'ugent-biblio-tpf': {
     url: 'https://data.linkeddatafragments.org/ugent-biblio'
-  },
-  'mol-tss': {
-    url: new URL('examples/mol-tss-readings.trig', document.baseURI).href
-  },
-  'riverbench-weather': {
-    url: new URL('examples/riverbench-weather-sample.trig', document.baseURI).href,
-    scope: 'memory'
   },
   'riverbench-jelly-assist-iot-weather': riverBenchJellyArchive('assist-iot-weather'),
   'riverbench-jelly-assist-iot-weather-graphs': riverBenchJellyArchive('assist-iot-weather-graphs'),

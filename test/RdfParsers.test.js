@@ -311,6 +311,15 @@ test('RdfParsers falls back to a suffix-based guess for text/plain', async () =>
   assert.equal(triples[0].object.value, 'guessed from .ttl');
 });
 
+test('RdfParsers treats text/plain .rml mapping files as Turtle', async () => {
+  const { triples } = await collect({
+    bodyText: '@prefix rr: <http://www.w3.org/ns/r2rml#> .\n<#Map> rr:subjectMap [ rr:template "x/{id}" ] .',
+    contentType: 'text/plain',
+    baseIRI: 'https://example.org/mapping.rml'
+  });
+  assert.equal(triples.length, 2);
+});
+
 test('RdfParsers falls back to a suffix-based guess for application/octet-stream', async () => {
   const { triples } = await collect({
     bodyText: JSON.stringify({ '@id': 'https://example.org/s', 'https://example.org/p': 'guessed from .jsonld' }),
