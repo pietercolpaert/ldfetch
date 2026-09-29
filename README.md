@@ -29,6 +29,7 @@ Features for the NodeJS framework in specific:
 
 Features for the Command Line:
  * Writes data on any URL in TriG on stdout by default; pass `--format nquads` or `--format json-ld` for N-Quads or JSON-LD instead
+ * TriG output only declares the prefixes it actually uses: the source's own, or else a well-known one from [prefix.cc](https://prefix.cc) (a snapshot ships with the CLI; refresh it with `npm run update:prefixes`)
  * Streams that output as the source is being downloaded and parsed, rather than waiting for the whole thing -- so a multi-gigabyte RDF Message log starts printing triples immediately instead of after a full download (formats without an incremental parser -- JSON-LD, RDF/XML, HTML, SHACL Compact -- are still buffered internally; `--frame`, `--predicates` and `--format json-ld` also require the whole response and fall back to buffering)
  * Round-trips an RDF Message-framed source (see Features above) as a proper RDF Message Log: `--format trig`/`nquads` keep the `VERSION`/`MESSAGE` (or `@version`/`@message`) delimiters, including empty messages; `--format json-ld` instead writes [newline-delimited JSON-LD](https://w3c-cg.github.io/rsp/spec/messages#json-ld) (NDJSON-LD), one JSON object per message, with `{}` for an empty one
  * Extra features to automatically follow links (see `ldfetch --help` after `npm install -g ldfetch`)

@@ -140,7 +140,7 @@ const puppeteer = require('puppeteer-core');
     assert.deepEqual(await page.$$eval('.example-menu section', sections => {
       const identity = sections.find(section => section.querySelector('h3')?.textContent === 'Identity');
       return Array.from(identity.querySelectorAll('.example-chip'), button => button.textContent);
-    }), ['Pieter Heyvaert', 'Ruben Verborgh', 'Patrick Hochstenbach', 'ORCID researcher']);
+    }), ['Pieter Heyvaert', 'Ruben Taelman', 'Patrick Hochstenbach', 'ORCID Profile']);
     assert.ok(await page.$('[data-example="mol-ldes"]'));
     assert.ok(await page.$('[data-example="riverbench-weather"]'));
     assert.deepEqual(await page.$$eval('.example-menu section', sections => {
@@ -277,19 +277,20 @@ const puppeteer = require('puppeteer-core');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     await page.waitForSelector('.dataset-profile-grid');
     assert.equal(await page.$eval('[data-view-tabs] > button:last-child', el => el.dataset.view), 'overview');
-    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('schema: https://schema.org/')));
-    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('schema2: http://schema.org/')));
-    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('custom: https://example.org/custom/')));
+    // Only the prefixes the output uses are listed, and in the panel rather than the output
+    assert.equal(await page.$eval('#prefixes-list', el => el.textContent), 'custom: https://example.org/custom/schema2: http://schema.org/');
+    assert.equal(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue().includes('@prefix')), false);
     assert.equal(await page.$eval('#messages-panel', el => el.hidden), true);
     assert.ok(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue().includes('schema2:name')));
     await page.goto(base + '#url=' + encodeURIComponent(base + 'data.jelly.gz'));
     await page.waitForFunction(() => /^(Paused|Done)/.test(document.querySelector('#status').textContent), { timeout: 60000 });
     assert.equal(await page.$eval('#output-editor .CodeMirror', el => el.CodeMirror.getValue()), '', 'No hidden whole-log editor for Jelly');
     assert.ok(await page.$eval('#message-editor .CodeMirror', el => el.CodeMirror.getValue().length > 0));
-    assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('http://www.w3.org/1999/02/22-rdf-syntax-ns#')));
+    assert.equal(await page.$eval('#message-editor .CodeMirror', el => el.CodeMirror.getValue().includes('@prefix')), false);
     if (!process.env.JELLY_FIXTURE) {
-      assert.ok(await page.$eval('#prefixes-list', el => el.textContent.includes('https://example.org/')));
-      assert.ok(await page.$eval('#status', el => el.textContent.includes('1002 messages fetched so far')));
+      assert.equal(await page.$eval('#prefixes-list', el => el.textContent), 'ex: https://example.org/');
+      // Streaming pauses once the first window of 1000 messages is in
+      assert.ok(await page.$eval('#status', el => el.textContent.includes('1000 messages fetched so far')));
     }
     console.log('Jelly regression:', await page.$eval('#status', el => el.textContent));
     await page.click('#load-more-messages');

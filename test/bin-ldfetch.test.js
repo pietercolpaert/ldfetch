@@ -60,6 +60,21 @@ test('CLI fetches and parses an http:// URL', async () => {
   }
 });
 
+test('CLI declares only the prefixes its output uses, in one block', async () => {
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/turtle' });
+    res.end('@prefix unused: <https://unused.example/>. @prefix ex: <https://example.org/>. ex:alice <http://xmlns.com/foaf/0.1/name> "Alice" .');
+  });
+
+  try {
+    const { code, stdout } = await runCli([`${baseUrl}/resource`]);
+    assert.equal(code, 0);
+    assert.equal(stdout, '@prefix ex: <https://example.org/>.\n@prefix foaf: <http://xmlns.com/foaf/0.1/>.\n\nex:alice foaf:name "Alice".\n');
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('CLI rejects file:// URLs without --local-files', async () => {
   const { code, stderr } = await runCli([FIXTURE_URL]);
   assert.notEqual(code, 0);

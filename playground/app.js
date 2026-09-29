@@ -1,13 +1,17 @@
 'use strict';
 
 var rdfWriter = require('rdf-writer-ts');
+var PrefixedWriter = require('../lib/PrefixedWriter.js');
+var prefixCc = require('../lib/prefix-cc.json');
 var rdfParserTs = require('rdf-parser-ts');
 var rdfJsJelly = require('rdfjs-jelly');
 var visualizations = require('./visualizations');
 
 // Register common vocabularies up front so pretty RDF output can use compact
 // names. Prefixes declared by the fetched document are added to the list shown
-// below the output once parsing finishes.
+// below the output once parsing finishes. The output only uses the prefixes it
+// needs, falling back to prefix.cc's (see lib/PrefixedWriter.js), and lists
+// them in the prefixes panel rather than in the data pane.
 var COMMON_PREFIXES = {
   rdf: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
   rdfs: 'http://www.w3.org/2000/01/rdf-schema#',
@@ -517,24 +521,29 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // The writer emits its prefix header synchronously during construction. The
-  // sink drops that header because the complete prefix map is displayed below.
-  function editorSink(cm, isReady) {
+  // Collects a writer's output without its @prefix declarations: the
+  // prefixes panel lists them instead, keeping the data pane lightweight.
+  // Only what the writer writes while `muted` (see prefixedWriter) is
+  // dropped, so a statement that a declaration closes still ends properly.
+  function prefixlessSink(onEnd) {
     var chunks = [];
-    return {
+    var sink = {
+      muted: false,
       write: function (chunk, encoding, callback) {
-        if (isReady()) chunks.push(chunk);
+        if (!(sink.muted && (chunk === '\n' || chunk.startsWith('@prefix ')))) chunks.push(chunk);
         if (callback) callback();
       },
       end: function (callback) {
-        cm.setValue(chunks.join(''));
+        var output = chunks.join('');
         chunks = [];
-        if (callback) callback(null, cm.getValue());
+        if (onEnd) onEnd(output);
+        if (callback) callback(null, output);
       }
     };
+    return sink;
   }
 
-  function renderPrefixes(prefixes) {
+  function updateKnownPrefixes(prefixes) {
     // Include the bindings used by the serializer, even when the source
     // does not declare them (e.g. JSON-LD). Preserve conflicting source
     // declarations under aliases rather than mislabelling compact output.
@@ -545,31 +554,57 @@ document.addEventListener('DOMContentLoaded', function () {
       while (Object.prototype.hasOwnProperty.call(outputPrefixes, alias) && outputPrefixes[alias] !== prefixes[name]) alias = name + suffix++;
       outputPrefixes[alias] = prefixes[name];
     });
-    var names = Object.keys(outputPrefixes).sort();
+  }
+
+  // Lists the prefixes that the shown output uses
+  function renderPrefixes(prefixes) {
+    var names = Object.keys(prefixes).sort();
     prefixesList.innerHTML = '';
     names.forEach(function (name) {
       var li = document.createElement('li');
       var code = document.createElement('code');
       code.textContent = name;
       li.appendChild(code);
-      li.appendChild(document.createTextNode(': ' + outputPrefixes[name]));
+      li.appendChild(document.createTextNode(': ' + prefixes[name]));
       prefixesList.appendChild(li);
     });
     prefixCount.textContent = names.length ? '(' + names.length + ')' : '';
   }
 
+  // A writer whose output only uses the prefixes it needs, preferring the
+  // known ones over prefix.cc's. They are listed in the prefixes panel as
+  // soon as they are declared, rather than in the output handed to onEnd.
+  function prefixedWriter (writerFormat, onEnd) {
+    var sink = prefixlessSink(onEnd);
+    var writer = new rdfWriter.Writer(sink, { format: writerFormat });
+    var prefixed = new PrefixedWriter(writer, {
+      table: prefixCc,
+      enabled: writerFormat !== 'N-Quads',
+      declare: function (prefixes) {
+        sink.muted = true;
+        writer.addPrefixes(prefixes);
+        sink.muted = false;
+        renderPrefixes(prefixed.prefixes);
+      }
+    });
+    prefixed.addPrefixes(outputPrefixes);
+    renderPrefixes({});
+    return prefixed;
+  }
+
+  // Serialize a list of quads in the given writer format, in one go.
+  function serializeQuads (quads, writerFormat) {
+    var output = '';
+    var writer = prefixedWriter(writerFormat, function (result) { output = result; });
+    writer.addQuads(quads);
+    writer.end();
+    return output;
+  }
+
   // Serialize the selected message scope in the chosen RDF syntax. JSON-LD
   // and optional framing are handled by renderMessageOutput below.
   function serializeMessage (quads) {
-    var writer = new rdfWriter.Writer({ format: outputFormat.value === 'nquads' ? 'N-Quads' : 'TriG', prefixes: outputPrefixes });
-    writer.addQuads(quads);
-    var output = '';
-    writer.end(function (error, result) { output = result; });
-    // Drop the repeated @prefix header (blank-line separated from the
-    // quads), matching the main output panel, which skips straight to
-    // content -- the prefixes are already listed in their own panel.
-    var separatorIndex = output.indexOf('\n\n');
-    return separatorIndex === -1 ? output : output.slice(separatorIndex + 2);
+    return serializeQuads(quads, outputFormat.value === 'nquads' ? 'N-Quads' : 'TriG');
   }
 
   function renderMessage (index) {
@@ -600,6 +635,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var revision = ++messageOutputRevision;
     messageCm.setOption('mode', OUTPUT_FORMATS[outputFormat.value].mode);
     if (outputFormat.value !== 'jsonld') { messageCm.setValue(serializeMessage(message)); return; }
+    renderPrefixes({});
     var converter = new window.ldfetch();
     if (!frameToggle.checked) {
       messageCm.setValue(JSON.stringify(converter.messageToJsonLd(message)));
@@ -827,18 +863,11 @@ document.addEventListener('DOMContentLoaded', function () {
     codeJsEl.textContent = jsSnippet(url, null, false);
     codeCliEl.textContent = cliSnippet(url, null, outputFormat.value);
     if (outputFormat.value !== 'jsonld') {
-      var writer = new rdfWriter.Writer({
-        format: OUTPUT_FORMATS[outputFormat.value].writerFormat,
-        prefixes: outputPrefixes
-      });
-      writer.addQuads(quads);
-      writer.end(function (error, result) {
-        if (error) throw error;
-        outputCm.setValue(result);
-      });
+      outputCm.setValue(serializeQuads(quads, OUTPUT_FORMATS[outputFormat.value].writerFormat));
       setStatus('Done: ' + quads.length + ' triple' + (quads.length === 1 ? '' : 's') + ' from ' + url);
       return;
     }
+    renderPrefixes({});
     setStatus(frameToggle.checked ? 'Framing …' : 'Rendering JSON-LD …');
     var converter = new window.ldfetch();
     var conversion = frameToggle.checked
@@ -860,6 +889,7 @@ document.addEventListener('DOMContentLoaded', function () {
     visualizationWorkbench.reset(COMMON_PREFIXES, 'current message');
     outputCm.setValue('');
     outputPanel.hidden = true;
+    updateKnownPrefixes({});
     renderPrefixes({});
     setStatus('Connecting …');
     fetchBtn.disabled = true;
@@ -886,7 +916,7 @@ document.addEventListener('DOMContentLoaded', function () {
           var value = (iri && iri.value !== undefined) ? iri.value : iri;
           if (documentPrefixes[prefix] !== value) {
             documentPrefixes[prefix] = value;
-            renderPrefixes(documentPrefixes);
+            updateKnownPrefixes(documentPrefixes);
           }
       }
       if (options.format === 'application/x-jelly-rdf') {
@@ -1126,6 +1156,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetchBtn.disabled = true;
     outputCm.setValue('');
     outputPanel.hidden = false;
+    updateKnownPrefixes({});
     renderPrefixes({});
     resetMessages();
     visualizationWorkbench.reset(COMMON_PREFIXES, 'loaded document');
@@ -1140,19 +1171,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var writer = null;
     if (format.writerFormat) {
-      var writerReady = false;
-      writer = new rdfWriter.Writer(editorSink(outputCm, function () { return writerReady; }), {
-        format: format.writerFormat,
-        prefixes: COMMON_PREFIXES
-      });
-      writerReady = true;
+      writer = prefixedWriter(format.writerFormat, function (output) { outputCm.setValue(output); });
     }
 
+    // Prefixes reach the writer as soon as they are parsed, so it can
+    // declare them right before the first quad that uses them
     var documentPrefixes = Object.create(null);
     fetcher.on('prefix', function (prefix, iri) {
       if (documentPrefixes[prefix] !== iri) {
         documentPrefixes[prefix] = iri;
-        renderPrefixes(documentPrefixes);
+        updateKnownPrefixes(documentPrefixes);
+        if (writer) writer.addPrefixes(outputPrefixes);
       }
     });
 
@@ -1191,7 +1220,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     fetcher.get(url).then(function (response) {
       if (writer) writer.end();
-      renderPrefixes(documentPrefixes);
       finishMessages();
       // Message output (including custom framing) is handled by the scope
       // renderer. Never build a second, hidden whole-log document.

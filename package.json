@@ -1,6 +1,6 @@
 {
   "name": "ldfetch",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Linked Data Fetch HTTP RDF library for Node.js and browsers",
   "type": "commonjs",
   "bin": {
@@ -12,6 +12,7 @@
     "test:playground": "npm run build:site && node test/playground-browser.cjs",
     "build": "node build/build.js",
     "build:playground": "node build/build-playground.js",
+    "update:prefixes": "node build/update-prefixes.js",
     "build:site": "npm run build && npm run build:playground && node build/assemble-site.js",
     "serve:playground": "npm run build:site && npx --yes http-server _site -c-1 -o"
   },

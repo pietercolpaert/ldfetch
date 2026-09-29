@@ -2,6 +2,8 @@
 var ldfetch = require('../lib/ldfetch.js');
 var isAllowedProtocol = require('../lib/allowedProtocol.js');
 var rdfWriter = require('rdf-writer-ts');
+var PrefixedWriter = require('../lib/PrefixedWriter.js');
+var prefixCc = require('../lib/prefix-cc.json');
 var program = require('commander').program;
 var path = require('path');
 var fs = require('fs');
@@ -37,9 +39,6 @@ if (FORMATS.indexOf(options.format) === -1) {
 
 var fetch = new ldfetch({ localFiles: !!options.localFiles });
 
-//Prefixes to be added to the writer so we can output the data in an easier fashion
-fetch.addPrefix("hydra","http://www.w3.org/ns/hydra/core#");
-
 if (!url) {
   console.error('Provide a URI please');
   process.exit();
@@ -63,8 +62,13 @@ if (!isAllowedProtocol(url, { localFiles: options.localFiles })) {
 //that's needed. Ordinary, non-message sources are untouched: messageCounter
 //is simply undefined for their quads, so they fall through to plain addQuad().
 var isJsonLd = options.format === 'json-ld';
-var writer = new rdfWriter.Writer(process.stdout, { format: options.format === 'nquads' ? 'N-Quads' : 'TriG', end: false });
-var prefixesWritten = false;
+//Only the prefixes the output actually uses are declared: the ones the
+//source declares take precedence, and prefix.cc's popular prefixes fill in
+//for namespaces the source has none for (see lib/PrefixedWriter.js)
+var writer = new PrefixedWriter(
+  new rdfWriter.Writer(process.stdout, { format: options.format === 'nquads' ? 'N-Quads' : 'TriG', end: false }),
+  { table: prefixCc, enabled: options.format !== 'nquads' }
+);
 
 //--frame needs the whole graph in memory to frame it, --predicates needs
 //every triple of a page available up front to decide what to follow next,
@@ -81,21 +85,16 @@ var processPage = async function (pageUrl) {
   var startTime = new Date();
   try {
     if (canStream) {
-      //Prefixes are declared on the writer live, as the 'prefix' event
+      //Prefixes are offered to the writer live, as the 'prefix' event
       //fires -- Turtle/TriG's own grammar guarantees a prefix is always
       //declared in the source before its first use, and parsing preserves
-      //that order, so writing it out immediately (rather than waiting for
-      //the whole document, as the buffered path below does) still produces
-      //valid, and still nicely compacted, output.
+      //that order, so the writer knows it by the time a quad needs it and
+      //declares it right before that quad.
       var onPrefix = (prefix, iri) => writer.addPrefix(prefix, iri);
       var onQuad = (quad, messageCounter) => {
         if (messageCounter === undefined) writer.addQuad(quad);
         else writer.addQuad({ quad, messageCounter });
       };
-      if (!prefixesWritten) {
-        prefixesWritten = true;
-        writer.addPrefixes(fetch.prefixes);
-      }
       fetch.on('prefix', onPrefix);
       fetch.on('quad', onQuad);
       try {
@@ -141,12 +140,11 @@ var processPage = async function (pageUrl) {
         } else {
           //Prefixes discovered in the source (e.g. Turtle/TriG @prefix,
           //SHACL-C's defaults, Jelly-RDF's namespace table, ...) are only
-          //known once the first response has been parsed, so declare them
-          //on the writer here
-          if (!prefixesWritten) {
-            prefixesWritten = true;
-            writer.addPrefixes(response.prefixes);
-          }
+          //known once the response has been parsed. With the whole page in
+          //memory, declare everything it needs up front, in one block,
+          //rather than interrupting the output whenever a new one shows up.
+          writer.addPrefixes(response.prefixes);
+          writer.declareFor(response.triples);
           //A message-framed source (see the comment above canStream) writes
           //as a proper RDF Message Log the same way the streaming path
           //above does, just one whole message at a time instead of quad by
@@ -175,7 +173,7 @@ var processPage = async function (pageUrl) {
 
 
 processPage(url).then(() => {
+  //The writer ends its output with a newline itself
   writer.end();
-  console.log(""); //newline at end of stdout
 });
 
