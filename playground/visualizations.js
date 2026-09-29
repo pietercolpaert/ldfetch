@@ -1602,14 +1602,25 @@ function createWorkbench(root, options) {
     }
     allIndex.preferredLanguages = index.preferredLanguages = [state.language].concat(browserLanguages).filter(Boolean);
     var ids = available.map(function (item) { return item.module.id; });
-    if (!state.view || ids.indexOf(state.view) === -1) state.view = ranked.primary.length ? ranked.primary[0].module.id : 'overview';
-    var active = available.find(function (item) { return item.module.id === state.view; }) || available[0];
+    // A view requested by a link (e.g. #view=ontology) usually is not
+    // available yet: it is restored before the new document loads, often
+    // while the previous one is still shown. Show the default meanwhile,
+    // but only give up the requested view once a load has completed
+    // without it.
+    var shownView = state.view && ids.indexOf(state.view) !== -1 ? state.view : (ranked.primary.length ? ranked.primary[0].module.id : 'overview');
+    if (!state.partial && !state.viewRequested && state.view !== shownView) {
+      var droppedView = state.view;
+      state.view = shownView;
+      // Keep a shared link from pointing at a view this document lacks
+      if (droppedView) notify();
+    }
+    var active = available.find(function (item) { return item.module.id === shownView; }) || available[0];
     var primary = ranked.primary.slice();
     if (active.module.id !== 'overview' && !primary.includes(active)) primary.push(active);
     var overview = available.find(function (item) { return item.module.id === 'overview'; });
     if (overview) primary.push(overview);
     var tabs = primary.map(function (item) {
-      var selected = item.module.id === state.view;
+      var selected = item.module.id === shownView;
       var count = item.result.count ? '<span>' + item.result.count + '</span>' : '';
       return '<button type="button" role="tab" id="viewer-tab-' + esc(item.module.id) + '" aria-controls="viewer-active-panel" aria-selected="' + selected + '" tabindex="' + (selected ? '0' : '-1') + '" data-view="' + esc(item.module.id) + '">' + esc(item.module.title) + count + '</button>';
     }).join('');
@@ -1707,6 +1718,7 @@ function createWorkbench(root, options) {
       index.prefixes = Object.assign({}, prefixes);
     }
     state.partial = false;
+    state.viewRequested = false;
     if (scopeLabel) state.scopeLabel = scopeLabel;
     render();
   }
@@ -1756,7 +1768,7 @@ function createWorkbench(root, options) {
       return;
     }
     var tab = event.target.closest('[data-view]');
-    if (tab) { state.view = tab.dataset.view; root.querySelector('.more-views').open = false; render(); var focused = root.querySelector('#viewer-tab-' + state.view); if (focused) focused.focus(); notify(); return; }
+    if (tab) { state.view = tab.dataset.view; state.viewRequested = false; root.querySelector('.more-views').open = false; render(); var focused = root.querySelector('#viewer-tab-' + state.view); if (focused) focused.focus(); notify(); return; }
     var entityTarget = event.target.closest('[data-entity], [data-select-entity]');
     if (entityTarget) {
       var entityKey = entityTarget.dataset.entity || entityTarget.dataset.selectEntity;
@@ -1853,6 +1865,7 @@ function createWorkbench(root, options) {
   function restoreState(next) {
     if (!next) return;
     state.view = next.view === 'profile' ? 'overview' : next.view || '';
+    state.viewRequested = !!state.view;
     state.language = next.language || '';
     state.camera = next.camera;
     state.filter = next.filter || '';
@@ -1867,7 +1880,7 @@ function createWorkbench(root, options) {
     reset: reset, addQuad: addQuad, complete: complete, render: render,
     getState: getState, restoreState: restoreState,
     setVisible: function (next) { visible = next; if (!visible) cleanup(); render(); },
-    setScope: function (quads, prefixes, label, partial, groups) { allIndex = new DatasetIndex(prefixes); allIndex.addAll(quads); allIndex.messageGroups = groups; applyGraphScope(); state.validationHtml = ''; state.scopeLabel = label; state.partial = !!partial; schedule(); },
+    setScope: function (quads, prefixes, label, partial, groups) { allIndex = new DatasetIndex(prefixes); allIndex.addAll(quads); allIndex.messageGroups = groups; applyGraphScope(); state.validationHtml = ''; state.scopeLabel = label; state.partial = !!partial; if (!partial) state.viewRequested = false; schedule(); },
     dispose: function () { disposed = true; cleanup(); if (renderTimer) clearTimeout(renderTimer); root.innerHTML = ''; }
   };
 }

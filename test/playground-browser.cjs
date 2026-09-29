@@ -387,18 +387,17 @@ const puppeteer = require('puppeteer-core');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     assert.equal(await page.$eval('#messages-panel', el => el.hidden), false);
     assert.equal(await page.$eval('#message-slider', el => el.max), '1');
-    await page.goto(base + '#url=' + encodeURIComponent(base + 'ontology.ttl') + '&pane=explore');
-    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
-    await page.evaluate(() => document.querySelector('[data-view="ontology"]').click());
+    // A view that only the newly linked document offers is still selected
+    // after an in-page hash change, although the previous document without
+    // it is still shown when the hash is applied
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'ontology.ttl') + '&pane=explore&view=ontology');
     await page.waitForSelector('.ontology-overview .mermaid-diagram svg', { timeout: 30000 });
     assert.ok(await page.$eval('.ontology-metadata', el => el.textContent.includes('Diagram ontology') && el.textContent.includes('1.0')));
     assert.equal(await page.$$eval('.ontology-overview .diagram-link', nodes => nodes.length), 2, 'Both classes are drawn and clickable');
     await page.evaluate(() => document.querySelectorAll('.ontology-overview .diagram-link')[1].dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await page.waitForFunction(() => document.querySelector('[data-entity-details] h3')?.textContent === 'Person');
     assert.ok(await page.$eval('.ontology-list', el => el.textContent.includes('In domain of')));
-    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/shacl-ui-showcase.ttl') + '&pane=explore');
-    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
-    await page.evaluate(() => document.querySelector('[data-view="shapes"]').click());
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'examples/shacl-ui-showcase.ttl') + '&pane=explore&view=shapes');
     await page.waitForSelector('.shape-topology .mermaid-diagram svg', { timeout: 30000 });
     assert.ok(await page.$$eval('.shape-topology figure', figures => figures.length) > 1, 'One extract-cbd-shape topology per root shape');
     assert.deepEqual(errors, []);
