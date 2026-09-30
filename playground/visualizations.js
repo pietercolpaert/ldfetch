@@ -890,26 +890,71 @@ function annotationRegion(value) {
   return { percent: !!match[1], x: Number(match[2]), y: Number(match[3]), width: Number(match[4]), height: Number(match[5]) };
 }
 
+function isPainting(index, annotation) {
+  return index.values(annotation, OA + 'motivatedBy').some(function (term) { return PAINTING_MOTIVATIONS.indexOf(term.value) !== -1; });
+}
+
+// The non-painting annotations of every canvas, grouped by the canvas they
+// target, computed once per state of the index: a digitised book can have
+// tens of thousands of line-by-line text annotations
+function annotationsByCanvas(index) {
+  var cache = index._annotationsByCanvas;
+  if (cache && cache.size === index.quads.length) return cache.groups;
+  var groups = {};
+  index.entitiesOfType(OA + 'Annotation').forEach(function (annotation) {
+    if (isPainting(index, annotation)) return;
+    var target = annotationTarget(index, annotation);
+    if (!target) return;
+    var canvas = target.source.value.split('#')[0];
+    (groups[canvas] || (groups[canvas] = [])).push(annotation);
+  });
+  index._annotationsByCanvas = { size: index.quads.length, groups: groups };
+  return groups;
+}
+
+// What an annotation says: its own label, else the text of its body (a
+// TextualBody's rdf:value, or a literal), else the label of the resource
+// its body is (a classifying annotation's type, say)
+function describeAnnotation(index, annotation) {
+  var bodies = index.values(annotation, OA + 'hasBody');
+  var bodyText = '';
+  for (var i = 0; i < bodies.length && !bodyText; i++) {
+    var body = index.entity(bodies[i]);
+    var value = body && index.values(body, RDF + 'value')[0];
+    if (value) bodyText = value.value;
+    else if (bodies[i].termType === 'Literal') bodyText = bodies[i].value;
+    else if (body && index.values(body, RDFS + 'label').length) bodyText = index.label(body);
+  }
+  var label = index.values(annotation, RDFS + 'label').length ? index.label(annotation) : '';
+  var motivation = index.values(annotation, OA + 'motivatedBy')[0];
+  return { label: label || bodyText || 'Annotation', body: bodyText, motivation: motivation ? index.compact(motivation.value).replace(/^.*:/, '') : '' };
+}
+
 function canvasAnnotations(index, canvas) {
-  return index.entitiesOfType(OA + 'Annotation').filter(function (annotation) {
-    if (index.values(annotation, OA + 'motivatedBy').some(function (term) { return PAINTING_MOTIVATIONS.indexOf(term.value) !== -1; })) return false;
+  return (annotationsByCanvas(index)[canvas.term.value] || []).map(function (annotation) {
+    var described = describeAnnotation(index, annotation);
     var target = annotationTarget(index, annotation);
-    return target && (target.source.value === canvas.term.value || target.source.value.indexOf(canvas.term.value + '#') === 0);
-  }).map(function (annotation) {
-    var bodies = index.values(annotation, OA + 'hasBody');
-    var bodyText = '';
-    for (var i = 0; i < bodies.length && !bodyText; i++) {
-      var body = index.entity(bodies[i]);
-      var value = body && index.values(body, RDF + 'value')[0];
-      if (value) bodyText = value.value;
-      else if (bodies[i].termType === 'Literal') bodyText = bodies[i].value;
-    }
-    var target = annotationTarget(index, annotation);
-    return { entity: annotation, label: index.label(annotation) || bodyText || 'Annotation', body: bodyText, region: annotationRegion(target && target.selector) };
+    return { entity: annotation, label: described.label, body: described.body, motivation: described.motivation, region: annotationRegion(target && target.selector) };
   });
 }
 
-function iiifCanvasDialog(index, canvas) {
+// Annotation pages that a manifest or canvas refers to (iiif:annotations)
+// without including their annotations, which live in a separate document
+function referencedAnnotationPages(index, owner) {
+  var owners = owner ? [owner] : Array.from(index.entities.values());
+  var pages = [];
+  owners.forEach(function (entity) {
+    index.listValues(entity, IIIF + 'annotations').forEach(function (page) {
+      if (page.termType !== 'NamedNode') return;
+      var loaded = index.entity(page);
+      if (!loaded || !index.values(loaded, AS + 'items').length) pages.push(page.value);
+    });
+  });
+  return pages.filter(function (url, position) { return pages.indexOf(url) === position; });
+}
+
+// pending: how many referenced annotation pages are still being loaded
+function iiifCanvasDialog(index, canvas, pending) {
   var image = imageForCanvas(index, canvas);
   if (!image) return null;
   var annotations = canvasAnnotations(index, canvas);
@@ -934,8 +979,8 @@ function iiifCanvasDialog(index, canvas) {
       var style = regionStyle(annotation.region);
       return style ? '<button type="button" class="iiif-region" style="' + style + '" data-iiif-annotation="' + position + '" aria-label="' + esc(annotation.label) + '"><span>' + (position + 1) + '</span></button>' : '';
     }).join('') + '</div></div><aside class="iiif-detail-annotations"><h4>Annotations <span>' + annotations.length + '</span></h4>' + (annotations.length ? '<ol>' + annotations.map(function (annotation, position) {
-      return '<li><button type="button" data-iiif-annotation="' + position + '"><b>' + esc(annotation.label) + '</b>' + (annotation.body && annotation.body !== annotation.label ? '<span>' + esc(annotation.body) + '</span>' : '') + (annotation.region ? '<small>Region ' + esc(annotation.region.x + ', ' + annotation.region.y + ', ' + annotation.region.width + ', ' + annotation.region.height + (annotation.region.percent ? '%' : ' px')) + '</small>' : '<small>Whole canvas</small>') + '</button></li>';
-    }).join('') + '</ol>' : '<p>No non-painting annotations are loaded for this canvas.</p>') + '</aside></div>';
+      return '<li><button type="button" data-iiif-annotation="' + position + '"><b>' + esc(annotation.label) + '</b>' + (annotation.body && annotation.body !== annotation.label ? '<span>' + esc(annotation.body) + '</span>' : '') + (annotation.motivation ? '<small>' + esc(annotation.motivation) + '</small>' : '') + (annotation.region ? '<small>Region ' + esc(annotation.region.x + ', ' + annotation.region.y + ', ' + annotation.region.width + ', ' + annotation.region.height + (annotation.region.percent ? '%' : ' px')) + '</small>' : '<small>Whole canvas</small>') + '</button></li>';
+    }).join('') + '</ol>' : '<p>' + (pending ? 'Loading ' + pending + ' referenced annotation page' + (pending === 1 ? '' : 's') + '…' : 'This canvas has no annotations besides its image.') + '</p>') + '</aside></div>';
   return dialog;
 }
 
@@ -977,26 +1022,31 @@ function iiifModule() {
     id: 'iiif', title: 'IIIF Presentation', priority: 980,
     // Web Annotations alone (the notes of a CSVW table, for one) are no IIIF
     detect: function (index) { var found = resources(index); return { useful: index.entitiesOfType(types.slice(0, 4)).length > 0, count: found.length }; },
-    render: function (index) {
+    render: function (index, state) {
       var manifests = index.entitiesOfType(IIIF + 'Manifest');
+      var referenced = referencedAnnotationPages(index);
+      var loading = state.annotationLoading;
+      var referencedHtml = loading && loading.total ? '<p class="iiif-referenced" role="status">Loading annotation pages: ' + loading.done + ' of ' + loading.total + (loading.failed ? ', ' + loading.failed + ' could not be loaded' : '') + '…</p>' :
+        (referenced.length && state.loadDocuments ? '<div class="iiif-referenced"><p>This manifest refers to <b>' + referenced.length + ' annotation page' + (referenced.length === 1 ? '' : 's') + '</b> kept in separate documents (transcriptions, tags, commentary, …). Opening a canvas loads its own; you can also load them all.</p><button type="button" class="action-button secondary" data-action="load-annotation-pages">Load all ' + referenced.length + ' annotation page' + (referenced.length === 1 ? '' : 's') + '</button></div>' : '');
       // The manifest's own items list gives canvases in their true,
       // authored order; entitiesOfType() falls back to whatever order the
       // RDF happened to stream in when no manifest is in scope (e.g. a
       // single canvas fetched on its own).
       var orderedCanvases = manifests.length ? index.listValues(manifests[0], AS + 'items').map(function (term) { return index.entity(term); }).filter(function (entity) { return entity && index.hasType(entity, IIIF + 'Canvas'); }) : [];
       var canvases = orderedCanvases.length ? orderedCanvases : index.entitiesOfType(IIIF + 'Canvas');
-      var annotations = index.entitiesOfType(OA + 'Annotation');
+      var annotations = index.entitiesOfType(OA + 'Annotation').filter(function (annotation) { return !isPainting(index, annotation); });
+      var ANNOTATION_LIST_LIMIT = 200;
       return '<div class="presentation-heading">' + (manifests.length ? manifests.map(function (manifest) { return '<h3>' + esc(index.label(manifest)) + '</h3>'; }).join('') : '<h3>IIIF presentation</h3>') + '<span>' + canvases.length + ' canvas' + (canvases.length === 1 ? '' : 'es') + '</span></div>' +
-        structuresHtml(index) +
+        referencedHtml + structuresHtml(index) +
         '<div class="canvas-strip">' + canvases.map(function (canvas, position) {
           var image = imageForCanvas(index, canvas);
           var annotationCount = canvasAnnotations(index, canvas).length;
           return '<figure' + selectAttr(canvas.term) + '><div class="canvas-image">' + (image ? '<button type="button" data-iiif-canvas="' + esc(termKey(canvas.term)) + '" aria-label="Open detailed view of ' + esc(index.label(canvas)) + '"><img src="' + esc(image.url) + '" alt="" loading="lazy" referrerpolicy="no-referrer"></button>' : '<div class="image-unavailable">No supported painting image found</div>') + '</div><figcaption><b>' + (position + 1) + '</b> ' + esc(index.label(canvas)) + (annotationCount ? '<span>' + annotationCount + ' annotation' + (annotationCount === 1 ? '' : 's') + '</span>' : '') + '</figcaption></figure>';
-        }).join('') + '</div>' + (annotations.length ? '<div class="annotation-list"><h3>Loaded annotations</h3>' + annotations.map(function (annotation) {
+        }).join('') + '</div>' + (annotations.length ? '<div class="annotation-list"><h3>Loaded annotations <small>' + annotations.length + '</small></h3>' + (annotations.length > ANNOTATION_LIST_LIMIT ? '<p class="view-note">Listing the first ' + ANNOTATION_LIST_LIMIT + '; open a canvas to see its own.</p>' : '') + annotations.slice(0, ANNOTATION_LIST_LIMIT).map(function (annotation) {
           var targets = index.values(annotation, OA + 'hasTarget');
           var bodies = index.values(annotation, OA + 'hasBody');
           var motivations = index.values(annotation, OA + 'motivatedBy');
-          return '<article' + selectAttr(annotation.term) + '><h4>' + esc(index.label(annotation)) + '</h4>' +
+          return '<article' + selectAttr(annotation.term) + '><h4>' + esc(describeAnnotation(index, annotation).label) + '</h4>' +
             (targets.length ? '<p><b>Target</b> ' + targets.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
             (bodies.length ? '<p><b>Body</b> ' + bodies.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') +
             (motivations.length ? '<p><b>Motivation</b> ' + motivations.map(function (term) { return termHtml(index, term); }).join(', ') + '</p>' : '') + '</article>';
@@ -1703,6 +1753,7 @@ function createWorkbench(root, options) {
   state.refresh = schedule;
   // CSVW previews and conversion, which only the playground itself can do
   state.csvw = options.csvw || null;
+  state.loadDocuments = options.fetchQuads ? loadDocuments : null;
 
   function cleanup() { if (definitionAbort) { definitionAbort.abort(); definitionAbort = null; } if (unmount) { unmount(); unmount = null; } }
 
@@ -1836,6 +1887,43 @@ function createWorkbench(root, options) {
     if (inspector) inspector.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
+  // Adds the RDF of further documents (referenced IIIF annotation pages) to
+  // what is shown, a few at a time. Kept with the current document: loading
+  // another one starts over.
+  function loadDocuments(urls, onLoaded) {
+    var target = allIndex;
+    var loaded = target._loadedDocuments || (target._loadedDocuments = {});
+    var queue = urls.filter(function (url) { return !loaded[url]; });
+    if (!queue.length) { if (onLoaded) onLoaded(); return; }
+    queue.forEach(function (url) { loaded[url] = 'pending'; });
+    var progress = state.annotationLoading = { done: 0, total: queue.length, failed: 0 };
+    var running = 0;
+    function next() {
+      if (target !== allIndex) return;
+      while (running < 4 && queue.length) {
+        var url = queue.shift();
+        running++;
+        options.fetchQuads(url).then(function (quads) {
+          if (target !== allIndex) return;
+          allIndex.addAll(quads);
+          applyGraphScope();
+        }, function () { progress.failed++; }).then(function () {
+          running--;
+          progress.done++;
+          if (target !== allIndex) return;
+          if (progress.done === progress.total) {
+            state.annotationLoading = null;
+            if (onLoaded) onLoaded();
+          }
+          schedule();
+          next();
+        });
+      }
+    }
+    schedule();
+    next();
+  }
+
   function applyGraphScope() {
     if (!state.graph) { index = allIndex; return; }
     index = new DatasetIndex(allIndex.prefixes);
@@ -1889,13 +1977,20 @@ function createWorkbench(root, options) {
     }
     var canvasTarget = event.target.closest('[data-iiif-canvas]');
     if (canvasTarget) {
-      var canvas = index.entity(canvasTarget.dataset.iiifCanvas);
-      var canvasDialog = canvas && iiifCanvasDialog(index, canvas);
+      var canvasKey = canvasTarget.dataset.iiifCanvas;
+      var canvas = index.entity(canvasKey);
+      // A canvas's own referenced annotation pages load as it opens
+      var pages = canvas && state.loadDocuments ? referencedAnnotationPages(index, canvas) : [];
+      var canvasDialog = canvas && iiifCanvasDialog(index, canvas, pages.length);
       if (canvasDialog) {
         canvasDialog.addEventListener('close', function () { canvasDialog.remove(); });
         canvasDialog.addEventListener('click', function (dialogEvent) { if (dialogEvent.target === canvasDialog) canvasDialog.close(); });
         root.appendChild(canvasDialog);
         canvasDialog.showModal();
+        if (pages.length) loadDocuments(pages, function () {
+          var updated = canvasDialog.isConnected && index.entity(canvasKey) && iiifCanvasDialog(index, index.entity(canvasKey), 0);
+          if (updated) canvasDialog.innerHTML = updated.innerHTML;
+        });
       }
       return;
     }
@@ -1913,6 +2008,11 @@ function createWorkbench(root, options) {
       action.disabled = true;
       action.textContent = 'Validating…';
       validateShacl();
+      return;
+    }
+    if (action && action.dataset.action === 'load-annotation-pages') {
+      action.disabled = true;
+      loadDocuments(referencedAnnotationPages(index));
       return;
     }
     if (action && action.dataset.action === 'csv2rdf') {

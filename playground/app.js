@@ -155,18 +155,14 @@ var EXAMPLES = {
   'iiif-lam-gods': {
     url: new URL('examples/iiif-lam-gods-manifest.jsonld', document.baseURI).href
   },
-  // Rembrandt's Night Watch (SK-C-5), as the Rijksmuseum serves it through
-  // Micrio: found from its Linked Art record (id.rijksmuseum.nl/200107928)
-  // via the VisualItem it shows and that item's DigitalObject. A single
-  // 14645x12158 px canvas; the manifest's own label is just a hash, the
-  // painting's metadata lives in the Linked Art record.
-  'iiif-nachtwacht': {
-    url: 'https://iiif.micr.io/PJEZO/manifest'
-  },
-  // The Voynich Manuscript (Beinecke MS 408, catalogued as "Cipher
-  // manuscript"), the IIIF manifest Yale's LUX links to: all 213 pages.
-  'iiif-voynich': {
-    url: 'https://collections.library.yale.edu/manifests/2002046'
+  // P. Martin Duncan's The Transformations (or Metamorphoses) of Insects
+  // (1870), digitised by the Wellcome Collection: 570 pages, each linking a
+  // separate annotation page with its text, line by line, on the region of
+  // the page it is printed on, and one for the book classifying the
+  // illustrations. Opening a page loads its own; the IIIF view can also
+  // load all of them (about 18,000 annotations).
+  'iiif-wellcome-insects': {
+    url: 'https://iiif.wellcomecollection.org/presentation/v3/b28047345'
   },
   owl: {
     url: 'https://www.w3.org/2002/07/owl.ttl'
@@ -427,6 +423,13 @@ document.addEventListener('DOMContentLoaded', function () {
     onStateChange: function () { updateHash(); },
     onAvailable: function (count) { document.getElementById('explore-tab').textContent = count ? 'Explore (' + count + ')' : 'Explore'; },
     csvw: { resolve: resolveCsvwUrl, preview: csvwPreview, convert: function (position) { startCsv2Rdf(position, false); } },
+    // Further documents a view needs (referenced IIIF annotation pages),
+    // fetched like the main one, through the proxy when that is on
+    fetchQuads: function (url) {
+      var fetcherOptions = { proxy: proxyToggle.checked ? proxyInput.value.trim() : '' };
+      if (proxyToggle.checked) fetcherOptions.headers = { Accept: PROXY_ACCEPT };
+      return new window.ldfetch(fetcherOptions).get(url).then(function (response) { return response.triples; });
+    },
     onLoadUrl: function (url) {
       urlInput.value = url;
       csv2rdfTable = pendingCsv2Rdf = null;

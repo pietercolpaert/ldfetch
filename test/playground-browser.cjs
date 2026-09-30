@@ -40,6 +40,33 @@ const puppeteer = require('puppeteer-core');
         'ex:knows a owl:ObjectProperty; rdfs:domain ex:Person; rdfs:range ex:Person. ex:name a owl:DatatypeProperty; rdfs:domain ex:Agent; rdfs:range xsd:string.');
       return;
     }
+    // A IIIF manifest whose canvases keep their annotations in separate
+    // annotation pages, as digitised books with transcriptions often do
+    if (req.url === '/iiif-referenced.json' || /^\/annotations-[12]\.json$/.test(req.url)) {
+      const origin = 'http://127.0.0.1:' + server.address().port;
+      const canvas = (n) => origin + '/iiif-referenced.json/canvas/' + n;
+      res.setHeader('Content-Type', 'application/ld+json');
+      if (req.url === '/iiif-referenced.json') {
+        res.end(JSON.stringify({
+          '@context': 'http://iiif.io/api/presentation/3/context.json', id: origin + '/iiif-referenced.json', type: 'Manifest', label: { en: ['Referenced annotations'] },
+          items: [1, 2].map((n) => ({
+            id: canvas(n), type: 'Canvas', label: { en: ['Page ' + n] }, width: 1000, height: 1000,
+            items: [{ id: canvas(n) + '/page', type: 'AnnotationPage', items: [{ id: canvas(n) + '/image', type: 'Annotation', motivation: 'painting', target: canvas(n), body: { id: origin + '/examples/avatar-alice.svg', type: 'Image', format: 'image/svg+xml' } }] }],
+            annotations: [{ id: origin + '/annotations-' + n + '.json', type: 'AnnotationPage' }]
+          }))
+        }));
+        return;
+      }
+      const n = Number(req.url.match(/[12]/)[0]);
+      res.end(JSON.stringify({
+        '@context': 'http://iiif.io/api/presentation/3/context.json', id: origin + req.url, type: 'AnnotationPage',
+        items: (n === 1 ? ['First line of text', 'Second line of text'] : ['Only line']).map((text, i) => ({
+          id: origin + req.url + '#a' + i, type: 'Annotation', motivation: 'supplementing',
+          body: { type: 'TextualBody', value: text }, target: canvas(n) + '#xywh=100,' + (100 + i * 100) + ',800,60'
+        }))
+      }));
+      return;
+    }
     if (req.url === '/table.csv-metadata.json') {
       res.setHeader('Content-Type', 'application/csvm+json');
       res.end(JSON.stringify({
@@ -436,6 +463,18 @@ const puppeteer = require('puppeteer-core');
     await page.waitForSelector('.rml-overview .mermaid-diagram svg', { timeout: 30000 });
     assert.ok(await page.$eval('.rml-overview svg', el => el.textContent.includes('foaf:name {$.name}')), 'JSONPath references survive Mermaid');
     assert.equal(await page.$$eval('.rml-overview .diagram-link', nodes => nodes.length), 3, 'Both triples maps and their shared source are clickable');
+    // IIIF annotation pages kept in separate documents load when a canvas
+    // opens, or all at once
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'iiif-referenced.json') + '&pane=explore');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.iiif-referenced', { timeout: 30000 });
+    assert.ok(await page.$eval('.iiif-referenced', el => el.textContent.includes('2 annotation pages')));
+    await page.evaluate(() => document.querySelector('[data-iiif-canvas]').click());
+    await page.waitForFunction(() => document.querySelectorAll('.iiif-dialog[open] .iiif-region').length === 2, { timeout: 30000 });
+    assert.ok(await page.$eval('.iiif-dialog .iiif-detail-annotations', el => el.textContent.includes('First line of text')), 'a TextualBody shows its text, not its IRI');
+    await page.click('[data-iiif-close]');
+    await page.click('[data-action="load-annotation-pages"]');
+    await page.waitForFunction(() => !document.querySelector('.iiif-referenced') && document.querySelectorAll('.canvas-strip figcaption')[1].textContent.includes('1 annotation'), { timeout: 30000 });
     // CSV on the Web: the Table view previews the first 1000 rows, and
     // CSV2RDF streams one RDF Message per row, 1000 at a time
     await page.goto(base + '#url=' + encodeURIComponent(base + 'table.csv-metadata.json') + '&pane=explore');
@@ -463,6 +502,6 @@ const puppeteer = require('puppeteer-core');
     await page.waitForSelector('.csvw-preview tbody tr', { timeout: 30000 });
     assert.equal(page.url().includes('csv2rdf='), false, 'Back returns to the metadata');
     assert.deepEqual(errors, []);
-    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout, ontology, shape and RML diagrams, CSV on the Web.');
+    console.log('Browser checks passed: default triples, ranking, Overview, prefixes, Jelly, lazy globe, geometries, message scope, share restoration, mobile layout, ontology, shape and RML diagrams, referenced IIIF annotations, CSV on the Web.');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

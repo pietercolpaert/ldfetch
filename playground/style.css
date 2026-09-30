@@ -1161,3 +1161,8 @@ footer {
 .cm-s-pietercolpaert .cm-def {
   color: var(--primary);
 }
+
+.iiif-referenced { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin: 0 0 1rem; padding: 0.7rem 0.85rem; border: 1px solid #cfe0f0; border-left: 4px solid var(--primary); border-radius: 6px; background: #f5f9fd; font-size: 0.8rem; }
+.iiif-referenced p { flex: 1 1 20rem; margin: 0; }
+p.iiif-referenced { display: block; }
+.annotation-list h3 small { color: #627487; font-weight: 400; font-size: 0.75rem; }
