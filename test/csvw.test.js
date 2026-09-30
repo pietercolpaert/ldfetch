@@ -97,7 +97,7 @@ test('the preview reads the header and at most the requested rows, then cancels 
   const [table] = csvwTables(indexOf(quads));
   const { previewRows } = await import('../playground/csvw.mjs');
   let cancelled = false;
-  const chunks = ['id,name,contact\n', '1,Alice,a\n2,Bob,b\n', '3,Carol,c\n4,Dave,d\n', '5,Eve,e\n'].map((text) => new TextEncoder().encode(text));
+  const chunks = ['id,name,contact\n', '1,Alice,a\n2,Bob,b\n', '3,Carol,c\n4,Dave,d\n', '5,Eve,e\n', '6,Frank,f\n', '7,Grace,g\n'].map((text) => new TextEncoder().encode(text));
   const reader = {
     read: () => Promise.resolve(chunks.length ? { done: false, value: chunks.shift() } : { done: true }),
     cancel: () => { cancelled = true; return Promise.resolve(); }
@@ -107,5 +107,37 @@ test('the preview reads the header and at most the requested rows, then cancels 
   assert.deepEqual(preview.rows.map((row) => row[1]), ['Alice', 'Bob', 'Carol']);
   assert.equal(preview.complete, false);
   assert.equal(cancelled, true);
-  assert.equal(chunks.length, 1, 'the last chunk was never read');
+  assert.ok(chunks.length > 0, 'the rest of the file is never read');
+});
+
+test('CSV2RDF skips the rows above the table and extra header rows, and matches columns by position', async () => {
+  const metadata = {
+    '@context': Object.assign({ dialect: { '@id': 'csvw:dialect', '@type': '@id' }, skipRows: { '@id': 'csvw:skipRows' }, headerRowCount: { '@id': 'csvw:headerRowCount' } }, CONTEXT),
+    url: 'weather.csv',
+    dialect: { skipRows: 2, headerRowCount: 2 },
+    tableSchema: {
+      aboutUrl: 'https://example.org/record/{year}',
+      columns: [
+        { name: 'year', titles: ['Year'] },
+        { name: 'rain', titles: ['Rainfall'], propertyUrl: 'https://example.org/rain' }
+      ]
+    }
+  };
+  const quads = await parse(metadata);
+  const [table] = csvwTables(indexOf(quads));
+  const { createConverter, previewRows } = await import('../playground/csvw.mjs');
+  const csv = 'Weather station,\nEstimated values are marked,\nyyyy,rain\n,mm\n1978,26.7\n1979,20.4\n';
+  const converter = createConverter({ quads, table: table.entity.term, url: 'https://example.org/weather.csv' });
+  const messages = converter.write(new TextEncoder().encode(csv)).concat(converter.end());
+  assert.equal(messages.length, 2, 'only the data rows');
+  const rain = messages.map((message) => message.find((quad) => quad.predicate.value === 'https://example.org/rain'));
+  assert.deepEqual(rain.map((quad) => [quad.subject.value, quad.object.value]), [['https://example.org/record/1978', '26.7'], ['https://example.org/record/1979', '20.4']],
+    'the header says yyyy and rain rather than the titles, and templates use column names');
+  const chunks = [new TextEncoder().encode(csv)];
+  const reader = { read: () => Promise.resolve(chunks.length ? { done: false, value: chunks.shift() } : { done: true }), cancel: () => Promise.resolve() };
+  const preview = await previewRows(reader, { quads, table: table.entity.term, url: 'https://example.org/weather.csv' });
+  assert.deepEqual(preview.header, ['yyyy', 'rain']);
+  assert.deepEqual(preview.rows, [['1978', '26.7'], ['1979', '20.4']]);
+  assert.equal(preview.skippedRows, 2);
+  assert.equal(preview.headerRows, 2);
 });

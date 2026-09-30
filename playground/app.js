@@ -253,21 +253,30 @@ var EXAMPLES = {
     url: 'https://raw.githubusercontent.com/moin-project/GTFS2RDF/refs/heads/main/rml/gtfsde-rml.ttl'
   },
   // CSV on the Web metadata: the Table view previews the CSV file each
-  // describes, and converts it with CSV2RDF on request. The UK Central
-  // Digital and Data Office's API catalogue is small, with a subject per
-  // row; the Office for National Statistics' time series are tens of
-  // thousands of rows, all describing one aboutUrl, and served without CORS
-  // headers (the metadata or the CSV file), so they go through the proxy.
+  // describes, and converts it with CSV2RDF on request. From the UK Central
+  // Digital and Data Office's API catalogue, the W3C CSVW examples (with
+  // virtual columns and valueUrl links, several subjects per row, and an
+  // RDF Data Cube of weather observations), a csvcubed Data Cube with its
+  // own code list, and a VanderBot mapping of Wikidata statements and
+  // references. (rdf-parser-csvw does not fetch a tableSchema given as a
+  // separate document, so table groups built that way convert without it.)
   'csvw-api-catalogue': {
     url: 'https://raw.githubusercontent.com/co-cddo/api-catalogue/main/data/catalogue.csv-metadata.json'
   },
-  'csvw-ons-construction': {
-    url: 'https://download.ons.gov.uk/downloads/datasets/output-in-the-construction-industry/editions/time-series/versions/52.csv-metadata.json',
-    proxy: true
+  'csvw-tree-ops': {
+    url: 'https://raw.githubusercontent.com/w3c/csvw/gh-pages/examples/tree-ops-ext.csv-metadata.json'
   },
-  'csvw-ons-retail': {
-    url: 'https://download.ons.gov.uk/downloads/datasets/retail-sales-index-large-and-small-businesses/editions/time-series/versions/45.csv-metadata.json',
-    proxy: true
+  'csvw-events': {
+    url: 'https://raw.githubusercontent.com/w3c/csvw/gh-pages/examples/events-listing.csv-metadata.json'
+  },
+  'csvw-camborne-weather': {
+    url: 'https://raw.githubusercontent.com/w3c/csvw/gh-pages/examples/cambornedata.csv-metadata.json'
+  },
+  'csvw-eurovision': {
+    url: 'https://raw.githubusercontent.com/ONSdigital/csvcubed-demo/main/out/sweden_at_eurovision_full/sweden-at-eurovision-complete-dataset.csv-metadata.json'
+  },
+  'csvw-bluffton-presidents': {
+    url: 'https://raw.githubusercontent.com/HeardLibrary/linked-data/master/json_schema/csv-metadata.json'
   },
   'mol-ldes': {
     url: 'https://shehabeldeenayman.github.io/Mol_sluis_Dessel_Usecase/LDESTSS/LDESTSS.trig'

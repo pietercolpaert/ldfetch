@@ -700,8 +700,8 @@ button {
 .csvw-table .entity-table th { width: 12rem; }
 .csvw-table h4 { margin: 1rem 0 0.4rem; font-size: 0.85rem; }
 .csvw-table > p { margin: 0.3rem 0; font-size: 0.8rem; }
-.csvw-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; margin: 0.8rem 0 0.2rem; }
-.csvw-actions .view-note { margin: 0; }
+.csvw-convert { margin: 0.9rem 0 0.3rem; padding: 0.75rem 0.85rem; border: 1px solid #cfe0f0; border-left: 4px solid var(--primary); border-radius: 6px; background: #f5f9fd; font-size: 0.8rem; }
+.csvw-convert p { margin: 0 0 0.5rem; }
 .csvw-columns, .csvw-preview { overflow: auto; border: 1px solid #dfe6ee; border-radius: 6px; }
 .csvw-preview { max-height: 32rem; }
 .csvw-columns table, .csvw-preview table { width: 100%; border-collapse: collapse; font-size: 0.74rem; }

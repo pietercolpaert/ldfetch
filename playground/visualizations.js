@@ -825,7 +825,9 @@ function statisticsModule() {
   }
   return {
     id: 'statistics', title: 'Charts', priority: 730,
-    detect: function (index) { var found = series(index); return { useful: found.some(function (item) { return item.values.length > 1; }) || index.entitiesOfType([QB + 'DataSet', QB + 'Observation']).length > 0, count: found.reduce(function (sum, item) { return sum + item.values.length; }, 0) }; },
+    // Charting any repeated number is a secondary view, but for an RDF Data
+    // Cube it is the one to show
+    detect: function (index) { var cube = index.entitiesOfType([QB + 'DataSet', QB + 'Observation']).length > 0 || index.quads.some(function (quad) { return quad.predicate.value === QB + 'dataSet'; }); var found = series(index); return { useful: found.some(function (item) { return item.values.length > 1; }) || cube, primary: cube, count: found.reduce(function (sum, item) { return sum + item.values.length; }, 0) }; },
     render: function (index) {
       var found = series(index).filter(function (item) { return item.values.length > 1; }).slice(0, 6);
       if (!found.length) return '<p class="view-note">A Data Cube was detected, but no repeated numeric property is available in the loaded scope.</p>';
@@ -973,7 +975,8 @@ function iiifModule() {
 
   return {
     id: 'iiif', title: 'IIIF Presentation', priority: 980,
-    detect: function (index) { var found = resources(index); return { useful: found.length > 0, count: found.length }; },
+    // Web Annotations alone (the notes of a CSVW table, for one) are no IIIF
+    detect: function (index) { var found = resources(index); return { useful: index.entitiesOfType(types.slice(0, 4)).length > 0, count: found.length }; },
     render: function (index) {
       var manifests = index.entitiesOfType(IIIF + 'Manifest');
       // The manifest's own items list gives canvases in their true,
@@ -1054,10 +1057,38 @@ function csvwModule() {
       (valueUrl ? '<small>value <code>' + esc(valueUrl) + '</code></small>' : '') + (aboutUrl ? '<small>about <code>' + esc(aboutUrl) + '</code></small>' : '') + '</td>' +
       '<td>' + (about ? esc(about.value) : '') + (flags.length ? '<div class="term-badges">' + flags.join('') + '</div>' : '') + '</td></tr>';
   }
+  // What the metadata says about the RDF to generate: an aboutUrl for the
+  // rows, and a propertyUrl/valueUrl per column, each also inheritable from
+  // the schema, the table or its group
+  function mappingOf(index, table, schema, columns) {
+    var inherited = [schema && index.entity(schema), table.entity, table.group].filter(Boolean);
+    function has(entity, property) { return !!entity && index.values(entity, CSVW + property).length > 0; }
+    function inheritedHas(property) { return inherited.some(function (entity) { return has(entity, property); }); }
+    var columnEntities = columns.map(function (column) { return index.entity(column); });
+    function count(property) { return inheritedHas(property) ? columns.length : columnEntities.filter(function (entity) { return has(entity, property); }).length; }
+    return { about: inheritedHas('aboutUrl'), otherSubjects: columnEntities.filter(function (entity) { return has(entity, 'aboutUrl'); }).length, properties: count('propertyUrl'), values: count('valueUrl'), columns: columns.length };
+  }
+  function convertHtml(mapping, position) {
+    var found = [];
+    if (mapping.about) found.push('an <code>aboutUrl</code> naming what each row describes');
+    if (mapping.properties) found.push('property URLs for ' + mapping.properties + ' of ' + mapping.columns + ' columns');
+    if (mapping.values) found.push('value URLs linking ' + mapping.values + ' column' + (mapping.values === 1 ? '' : 's') + ' to other resources');
+    if (mapping.otherSubjects) found.push('an <code>aboutUrl</code> on ' + mapping.otherSubjects + ' column' + (mapping.otherSubjects === 1 ? '' : 's') + ', naming the resource ' + (mapping.otherSubjects === 1 ? 'its cells describe' : 'their cells describe'));
+    var explanation = found.length
+      ? '<p><b>This table description contains RDF mapping information:</b> ' + found.join(', ') + '. ' + (mapping.about || mapping.otherSubjects ? '' : 'Without an <code>aboutUrl</code>, each row describes a blank node. ') + '</p>'
+      : '<p><b>This table description contains no RDF mapping information</b> (no <code>aboutUrl</code>, <code>propertyUrl</code> or <code>valueUrl</code>), so each row would describe a blank node, with properties made from the column names.</p>';
+    return '<div class="csvw-convert">' + explanation +
+      '<p>CSV2RDF converts the table to RDF as the W3C <a href="https://www.w3.org/TR/csv2rdf/" target="_blank" rel="noopener">CSV2RDF</a> recommendation describes, with <a href="https://github.com/rdf-ext/rdf-parser-csvw" target="_blank" rel="noopener">rdf-parser-csvw</a>, and loads the result into the playground: one RDF Message per row, 1000 rows at a time, to explore like any other RDF. Browser Back returns to this description.</p>' +
+      '<button type="button" class="action-button" data-action="csv2rdf" data-csvw-table="' + position + '">CSV2RDF</button></div>';
+  }
   function previewHtml(preview) {
     if (!preview) return '<p class="view-note">Loading the first rows of the CSV file…</p>';
     if (preview.error) return '<p class="view-note">The CSV file could not be previewed: ' + esc(preview.error) + '</p>';
-    return '<p class="view-note">' + (preview.complete ? 'All ' + preview.rows.length + ' rows' : 'The first ' + preview.rows.length + ' rows') + ' of the CSV file, as published.</p>' +
+    var layout = [];
+    if (preview.skippedRows) layout.push('after skipping ' + preview.skippedRows + ' row' + (preview.skippedRows === 1 ? '' : 's') + ' above the table');
+    if (preview.headerRows > 1) layout.push('below its ' + preview.headerRows + ' header rows');
+    if (preview.headerRows === 0) layout.push('which has no header row');
+    return '<p class="view-note">' + (preview.complete ? 'All ' + preview.rows.length + ' rows' : 'The first ' + preview.rows.length + ' rows') + ' of the CSV file, as published' + (layout.length ? ', ' + layout.join(' and ') : '') + '.</p>' +
       '<div class="csvw-preview"><table><thead><tr><th>#</th>' + preview.header.map(function (cell) { return '<th>' + esc(cell) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       preview.rows.map(function (row, position) {
         return '<tr><td>' + (position + 1) + '</td>' + row.map(function (cell) { return '<td>' + esc(cell) + '</td>'; }).join('') + '</tr>';
@@ -1087,7 +1118,7 @@ function csvwModule() {
         return '<section class="csvw-table"' + selectAttr(entity.term) + '><h3>' + esc(title ? title.value : url.split(/[?#]/)[0].split('/').pop()) + '</h3>' +
           '<p class="term-iri"><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + '</a></p>' +
           (metadata ? '<table class="entity-table">' + metadata + '</table>' : '') +
-          (csvw ? '<div class="csvw-actions"><button type="button" class="action-button" data-action="csv2rdf" data-csvw-table="' + position + '">CSV2RDF</button><span class="view-note">Converts the CSV file with <a href="https://github.com/rdf-ext/rdf-parser-csvw" target="_blank" rel="noopener">rdf-parser-csvw</a>, one RDF Message per row, 1000 rows at a time.</span></div>' : '') +
+          (csvw ? convertHtml(mappingOf(index, table, schema, columns), position) : '') +
           '<h4>Schema</h4>' +
           (aboutUrl ? '<p><b>Each row describes</b> <code>' + esc(aboutUrl) + '</code></p>' : '') +
           (primaryKey.length ? '<p><b>Primary key</b> ' + esc(primaryKey.join(', ')) + '</p>' : '') +
@@ -1652,7 +1683,7 @@ function rankViews(available) {
   if (ids.includes('credentials')) secondary.push('profiles');
   if (ids.includes('sensors')) secondary.push('timeline');
   if (ids.includes('timeseries')) secondary.push('timeline', 'statistics');
-  var primary = available.filter(function (item) { return !secondary.includes(item.module.id); }).slice(0, 4);
+  var primary = available.filter(function (item) { return (item.result && item.result.primary) || !secondary.includes(item.module.id); }).slice(0, 4);
   return { primary: primary, more: available.filter(function (item) { return item.module.id !== 'overview' && !primary.includes(item); }) };
 }
 
