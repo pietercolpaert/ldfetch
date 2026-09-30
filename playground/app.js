@@ -155,6 +155,19 @@ var EXAMPLES = {
   'iiif-lam-gods': {
     url: new URL('examples/iiif-lam-gods-manifest.jsonld', document.baseURI).href
   },
+  // Rembrandt's Night Watch (SK-C-5), as the Rijksmuseum serves it through
+  // Micrio: found from its Linked Art record (id.rijksmuseum.nl/200107928)
+  // via the VisualItem it shows and that item's DigitalObject. A single
+  // 14645x12158 px canvas; the manifest's own label is just a hash, the
+  // painting's metadata lives in the Linked Art record.
+  'iiif-nachtwacht': {
+    url: 'https://iiif.micr.io/PJEZO/manifest'
+  },
+  // The Voynich Manuscript (Beinecke MS 408, catalogued as "Cipher
+  // manuscript"), the IIIF manifest Yale's LUX links to: all 213 pages.
+  'iiif-voynich': {
+    url: 'https://collections.library.yale.edu/manifests/2002046'
+  },
   owl: {
     url: 'https://www.w3.org/2002/07/owl.ttl'
   },
