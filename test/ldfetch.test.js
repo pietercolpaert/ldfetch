@@ -300,3 +300,61 @@ test('ldfetch.frame applies a JSON-LD frame to parsed triples', async () => {
     await closeServer(server);
   }
 });
+test('ldfetch.getStream streams a gzipped N-Triples message log labelled application/gzip, naming the file only in the gzip header', async () => {
+  const zlib = require('node:zlib');
+  const text = 'VERSION "1.1-messages"\n<https://example.org/s> <https://example.org/p> "first" .\nMESSAGE\n<https://example.org/s> <https://example.org/p> "second" .\nMESSAGE\n';
+  // gzip with the FNAME flag (8) and a name, as `gzip file.nt` writes it
+  const plain = zlib.gzipSync(text);
+  const name = Buffer.from('log.nt\0', 'latin1');
+  const named = Buffer.concat([plain.subarray(0, 10), name, plain.subarray(10)]);
+  named[3] |= 8;
+
+  const { server, baseUrl } = await createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/gzip' });
+    // Send the first half now and the rest much later: nothing may wait for the end
+    res.write(named.subarray(0, 40));
+    setTimeout(() => res.end(named.subarray(40)), 100);
+  });
+
+  try {
+    const fetcher = new LDFetch();
+    const tags = [];
+    const messages = [];
+    fetcher.on('quad', (quad, messageCounter) => tags.push(messageCounter));
+    fetcher.on('message', message => messages.push(message.length));
+
+    const response = await fetcher.getStream(`${baseUrl}/download`);
+
+    assert.deepEqual(tags, [0, 1]);
+    assert.deepEqual(messages, [1, 1]);
+    assert.equal(response.triples, undefined);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('ldfetch.getStream names a compressed resource through Content-Disposition, or else by looking at its text', async () => {
+  const zlib = require('node:zlib');
+  const nt = '<https://example.org/s> <https://example.org/p> "x" .\n';
+  const { server, baseUrl } = await createServer((req, res) => {
+    if (req.url === '/named') {
+      res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="data.ttl"' });
+      res.end(nt);
+    } else {
+      res.writeHead(200, { 'content-type': 'application/octet-stream' });
+      res.end(zlib.gzipSync(nt));
+    }
+  });
+
+  try {
+    for (const path of ['/named', '/sniffed']) {
+      const fetcher = new LDFetch();
+      const quads = [];
+      fetcher.on('quad', quad => quads.push(quad));
+      await fetcher.getStream(baseUrl + path);
+      assert.equal(quads.length, 1, path);
+    }
+  } finally {
+    await closeServer(server);
+  }
+});
