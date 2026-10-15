@@ -1,9 +1,10 @@
 'use strict';
 
-var rdfWriter = require('rdf-writer-ts');
+var EventEmitter = require('events').EventEmitter;
+var N3 = require('n3');
+var MessageParser = require('n3.js-messages').MessageParser;
 var PrefixedWriter = require('../lib/PrefixedWriter.js');
 var prefixCc = require('../lib/prefix-cc.json');
-var rdfParserTs = require('rdf-parser-ts');
 var rdfJsJelly = require('rdfjs-jelly');
 var visualizations = require('./visualizations');
 
@@ -363,7 +364,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // lookahead buffer of whatever streams in past that. "Load next" swaps in
   // the next window and drops the old one and everything before it, so at
   // most ~2 windows' worth of messages are ever referenced at once -- for
-  // Jelly-RDF and rdf-parser-ts's text formats, messages stream progressively,
+  // Jelly-RDF and the text formats, messages stream progressively,
   // so this is a real memory bound apart from a parser/network chunk's small
   // lookahead beyond the visible window.
   var WINDOW_SIZE = 1000;
@@ -645,7 +646,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // soon as they are declared, rather than in the output handed to onEnd.
   function prefixedWriter (writerFormat, onEnd) {
     var sink = prefixlessSink(onEnd);
-    var writer = new rdfWriter.Writer(sink, { format: writerFormat });
+    var writer = new N3.Writer(sink, { format: writerFormat });
     var prefixed = new PrefixedWriter(writer, {
       table: prefixCc,
       enabled: writerFormat !== 'N-Quads',
@@ -818,12 +819,51 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  // An incremental text parser on top of n3.js-messages: write(text) and
+  // end() synchronously return the items parsed so far, so a chunk read from
+  // the network can be consumed right away. An item is a plain quad or, for a
+  // document that announces a "-messages" version, a {quad, messageCounter}
+  // pair. text/n3 is no RDF Messages syntax, and is parsed by plain N3.js.
+  function createIncrementalParser (parserOptions, onPrefix) {
+    var feed = new EventEmitter();
+    var items = [];
+    var failure = null;
+    var messageLog = parserOptions.version ? /-messages$/.test(parserOptions.version) : false;
+    function onQuad (error, quad, messageIndex) {
+      if (error) failure = failure || error;
+      else if (quad) items.push(messageLog ? { quad: quad, messageCounter: messageIndex } : quad);
+    }
+    if (parserOptions.format === 'text/n3') {
+      new N3.Parser({ baseIRI: parserOptions.baseIRI, format: 'text/n3' }).parse(feed, function (error, quad, prefixes) {
+        onQuad(error, quad, 0);
+        if (prefixes) Object.keys(prefixes).forEach(function (prefix) { onPrefix(prefix, prefixes[prefix]); });
+      });
+    } else {
+      new MessageParser({ baseIRI: parserOptions.baseIRI, format: parserOptions.format, version: parserOptions.version }).parse(feed, {
+        onVersion: function (label) { messageLog = /-messages$/.test(label); },
+        onPrefix: onPrefix,
+        onQuad: onQuad,
+        onMessage: function (error) { if (error) failure = failure || error; }
+      });
+    }
+    function drain () {
+      if (failure) throw failure;
+      var result = items;
+      items = [];
+      return result;
+    }
+    return {
+      write: function (text) { feed.emit('data', text); return drain(); },
+      end: function () { feed.emit('end'); return drain(); }
+    };
+  }
+
   // Feeds one parsed item (a plain quad or, in RDF Messages mode, a
   // {quad, messageCounter} pair) into the in-progress message being built up
   // across chunk boundaries, flushing it via receiveMessage() whenever the
-  // counter changes. Unlike the ordinary fetch path (which groups messages
-  // with rdf-parser-ts's toMessages() once the whole document is in hand,
-  // so it can preserve entirely-empty messages), this infers boundaries
+  // counter changes. Unlike the ordinary fetch path (which receives messages
+  // from n3.js-messages' whole-document parse, so it can preserve
+  // entirely-empty messages), this infers boundaries
   // purely from messageCounter transitions as chunks arrive -- the only
   // option when the source may never be fully read. The trade-off: a
   // message with zero quads that lands exactly on a chunk boundary has
@@ -953,7 +993,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Entry point for examples too large to fetch normally: raw
   // fetch() (a plain GET, so no CORS-preflight-triggering headers), parsed
-  // incrementally with rdf-parser-ts's IncrementalParser as chunks arrive,
+  // incrementally with n3.js-messages as chunks arrive,
   // rather than lib/ldfetch.js's usual buffer-the-whole-response approach.
   function startStreamingExample (url, options) {
     options = options || { format: 'text/turtle' };
@@ -1004,7 +1044,7 @@ document.addEventListener('DOMContentLoaded', function () {
         streamingKind = 'text';
         streamingReader = body.getReader();
         streamingDecoder = new TextDecoder('utf-8');
-        streamingParser = new rdfParserTs.IncrementalParser({ baseIRI: url, format: options.format, version: options.version }, { prefix: addPrefix });
+        streamingParser = createIncrementalParser({ baseIRI: url, format: options.format, version: options.version }, addPrefix);
       }
       codeJsEl.textContent = streamingJsSnippet(url, options);
       codeCliEl.textContent = cliSnippet(url, null);
@@ -1125,27 +1165,21 @@ document.addEventListener('DOMContentLoaded', function () {
       ].join('\n');
     }
     return [
-      "const { IncrementalParser, isMessageQuad } = require('rdf-parser-ts');",
+      "const { Readable } = require('node:stream');",
+      "const { MessageStreamParser } = require('n3.js-messages');",
       '',
       "const response = await fetch('" + url + "');",
-      'const reader = response.body' + decompression + '.getReader();',
-      "const decoder = new TextDecoder('utf-8');",
-      "const parser = new IncrementalParser({ baseIRI: '" + url + "', format: '" + format + "' });",
+      "const messages = Readable.fromWeb(response.body" + decompression + ")",
+      "  .pipe(new MessageStreamParser({ baseIRI: '" + url + "', format: '" + format + "' }));",
       '',
-      '// Stop calling reader.read() once you have enough -- the connection just',
-      '// sits there, paused, until you call it again for more. Each read() can',
-      "// contain several messages at once (a chunk can't be consumed partway",
-      '// through), so track the highest messageCounter seen rather than',
-      "// counting items -- that's how many *complete* messages you have.",
-      'let highestMessageCounter = -1;',
-      'while (highestMessageCounter < ' + (WINDOW_SIZE - 1) + ') {',
-      '  const { done, value } = await reader.read();',
-      '  if (done) break;',
-      '  for (const item of parser.write(decoder.decode(value, { stream: true }))) {',
-      '    if (isMessageQuad(item)) highestMessageCounter = Math.max(highestMessageCounter, item.messageCounter);',
-      '  }',
-      '}',
-      '// reader is now paused; call reader.read() again whenever you want more.'
+      '// Each message is an array of quads, delivered as soon as it is complete.',
+      '// Stop iterating once you have enough: backpressure keeps the rest of the',
+      '// stream from being read.',
+      'let count = 0;',
+      'for await (const message of messages) {',
+      '  console.log(message);',
+      '  if (++count >= ' + WINDOW_SIZE + ') break;',
+      '}'
     ].join('\n');
   }
 
@@ -1393,11 +1427,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // it belongs to (messageCounter, undefined for ordinary quads) -- given
     // from the very first quad, not just once a 'message' event confirms
     // it, since messageCounter is what lets the writer produce a proper RDF
-    // Message Log below (see issue #59's follow-up): rdf-writer-ts's
-    // addQuad({ quad, messageCounter }) form writes the VERSION/MESSAGE
-    // delimiters itself, filling in empty messages from gaps in the
-    // counter. Once we know a source is message-framed, per-quad whole-
-    // document visualization and serialization are skipped; only the
+    // Message Log below (see issue #59's follow-up). Once we know a source is
+    // message-framed, per-quad whole-document visualization and serialization are skipped; only the
     // selected message scope is rendered. For a source with hundreds
     // of thousands of quads, feeding them all to the whole-document view
     // too would be wasted work, enough on its own to hang the tab.

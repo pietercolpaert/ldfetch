@@ -5,7 +5,7 @@ const browserPolyfills = require('./browser-polyfills.js');
 
 // Bundled separately from dist/main.js: the playground loads main.js first
 // (the same bundle a real consumer would use) and this script afterwards,
-// so it only needs to add rdf-writer-ts and the UI wiring on top.
+// so it only needs to add N3.js's writer and the UI wiring on top.
 esbuild.build({
   ...browserPolyfills,
   entryPoints: [path.join(__dirname, '..', 'playground', 'app.js')],

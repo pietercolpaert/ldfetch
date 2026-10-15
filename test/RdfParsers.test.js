@@ -122,13 +122,11 @@ test('RdfParsers.parseStream emits message boundaries progressively, not just at
 
   input.write('@version "1.2-messages" .\n<https://example.org/s> <https://example.org/p> "m1" .\nMESSAGE\n');
   input.write('<https://example.org/s> <https://example.org/p> "m2" .\nMESSAGE\n');
-  // The first message is only ever confirmed complete once evidence of what
-  // follows it arrives (here, message 2's own quad) -- but crucially that
-  // happens well before the stream ends (still open below): if 'message'
-  // only fired at 'end' (the old toMessages()-at-end grouping), this would
-  // still be empty here.
+  // A message is complete as soon as its delimiter has been read, well
+  // before the stream ends (still open below): if 'message' only fired at
+  // 'end', this would still be empty here.
   await new Promise((resolve) => emitter.once('message', () => setImmediate(resolve)));
-  assert.deepEqual(events, [['message', 1]]);
+  assert.deepEqual(events, [['message', 1], ['message', 1]]);
 
   input.end('<https://example.org/s> <https://example.org/p> "m3" .');
   await donePromise;

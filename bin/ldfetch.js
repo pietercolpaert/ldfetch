@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 var ldfetch = require('../lib/ldfetch.js');
 var isAllowedProtocol = require('../lib/allowedProtocol.js');
-var rdfWriter = require('rdf-writer-ts');
+var N3 = require('n3');
+var MessageWriter = require('n3.js-messages').MessageWriter;
 var PrefixedWriter = require('../lib/PrefixedWriter.js');
 var prefixCc = require('../lib/prefix-cc.json');
 var program = require('commander').program;
@@ -53,11 +54,11 @@ if (!isAllowedProtocol(url, { localFiles: options.localFiles })) {
   process.exit(1);
 }
 //RDF Message-framed sources (Turtle/TriG "-messages" versions, Jelly-RDF)
-//round-trip as RDF Message Logs here too: rdf-writer-ts's addQuad() accepts
+//round-trip as RDF Message Logs here too: PrefixedWriter's addQuad() accepts
 //a { quad, messageCounter } entry in place of a bare quad and, given those,
-//writes the VERSION/MESSAGE (or @version/@message) delimiters itself --
-//including filling in entirely empty messages from gaps in the counter --
-//so passing the tagged form whenever it's available (see the 'quad' event,
+//has n3.js-messages' MessageWriter write the VERSION/MESSAGE (or
+//@version/@message) delimiters -- including filling in entirely empty
+//messages from gaps in the counter -- so passing the tagged form whenever it's available (see the 'quad' event,
 //and lib/RdfParsers.js's relayMessageAwareStream/wireJellyMessages) is all
 //that's needed. Ordinary, non-message sources are untouched: messageCounter
 //is simply undefined for their quads, so they fall through to plain addQuad().
@@ -66,7 +67,10 @@ var isJsonLd = options.format === 'json-ld';
 //source declares take precedence, and prefix.cc's popular prefixes fill in
 //for namespaces the source has none for (see lib/PrefixedWriter.js)
 var writer = new PrefixedWriter(
-  new rdfWriter.Writer(process.stdout, { format: options.format === 'nquads' ? 'N-Quads' : 'TriG', end: false }),
+  function (messages) {
+    var writerOptions = { format: options.format === 'nquads' ? 'N-Quads' : 'TriG', end: false };
+    return messages ? new MessageWriter(process.stdout, writerOptions) : new N3.Writer(process.stdout, writerOptions);
+  },
   { table: prefixCc, enabled: options.format !== 'nquads' }
 );
 

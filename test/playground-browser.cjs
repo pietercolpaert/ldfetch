@@ -260,7 +260,7 @@ const puppeteer = require('puppeteer-core');
     await page.waitForFunction(() => document.querySelector('#status').textContent.includes('/blank-nodes.ttl'));
     await page.waitForSelector('.geometry-list');
     assert.equal(await page.$eval('.geometry-list button', el => el.textContent), 'Named blank-node geometry');
-    assert.ok(await page.$eval('.geometry-list', el => el.textContent.includes('_:ambiguous')));
+    assert.ok(await page.$eval('.geometry-list', el => /_:b\d+_ambiguous/.test(el.textContent)));
     assert.equal(await page.$$eval('#visualization-workbench [data-entity^="BlankNode|"], #visualization-workbench [data-select-entity^="BlankNode|"]', nodes => nodes.length), 0);
     await page.evaluate(() => document.querySelector('.geometry-list button').click());
     await page.waitForSelector('[data-entity-details] [data-blank-toggle]');

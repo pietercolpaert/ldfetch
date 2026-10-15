@@ -144,7 +144,7 @@ test('CLI writes a message-framed source as a proper RDF Message Log by default 
   try {
     const { code, stdout } = await runCli([`${baseUrl}/log`]);
     assert.equal(code, 0);
-    assert.match(stdout, /@version "1\.2-messages" \./);
+    assert.match(stdout, /@version "1\.2-messages" ?\./);
     // Two consecutive @message . lines: the deliberately empty message
     // between m1 and m3 must still round-trip, exactly like the parser side.
     assert.match(stdout, /"m1"\.\s*@message \.\s*@message \.\s*<https:\/\/example\.org\/s3>[^"]*"m3"/);

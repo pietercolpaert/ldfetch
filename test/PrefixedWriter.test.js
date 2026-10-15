@@ -2,7 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { Writer } = require('rdf-writer-ts');
+const { Writer } = require('n3');
+const { MessageWriter } = require('n3.js-messages');
 const df = require('@rdfjs/data-model').default;
 
 const PrefixedWriter = require('../lib/PrefixedWriter.js');
@@ -74,4 +75,40 @@ test('quads added in the same tick share one prefix block', async () => {
 test('N-Quads output declares no prefixes', () => {
   const output = serialize([q(EX + 'a', 'https://schema.org/name', df.literal('A'))], { ex: EX }, { format: 'N-Quads' });
   assert.equal(output, '<https://example.org/a> <https://schema.org/name> "A" .\n');
+});
+
+function serializeLazily (feed, format) {
+  const created = [];
+  const writer = new PrefixedWriter((messages) => {
+    created.push(messages);
+    return messages ? new MessageWriter({ format }) : new Writer({ format });
+  }, { table: TABLE, enabled: format !== 'N-Quads' });
+  feed(writer);
+  let output;
+  writer.end((error, result) => { output = result; });
+  return { output, created };
+}
+
+test('a lazily created writer is a plain writer for untagged quads', () => {
+  const { output, created } = serializeLazily((w) => w.addQuad(q(EX + 'a', EX + 'p', df.literal('A'))), 'TriG');
+  assert.deepEqual(created, [false]);
+  assert.doesNotMatch(output, /message|version/i);
+});
+
+test('quads tagged with a messageCounter are written as a message log, with empty messages for gaps', () => {
+  const { output, created } = serializeLazily((w) => {
+    w.addPrefix('ex', EX);
+    w.addQuad({ quad: q(EX + 'a', EX + 'p', df.literal('m1')), messageCounter: 0 });
+    w.addQuad({ quad: q(EX + 'a', EX + 'p', df.literal('m3')), messageCounter: 2 });
+  }, 'TriG');
+  assert.deepEqual(created, [true]);
+  assert.match(output, /@version "1\.2-messages" ?\./);
+  assert.match(output, /@prefix ex: /);
+  assert.match(output, /"m1"\s*\.\s*@message \.\s*@message \.\s*ex:a ex:p "m3"/);
+});
+
+test('addMessage writes an N-Quads message log', () => {
+  const { output } = serializeLazily((w) => w.addMessage([q(EX + 'a', EX + 'p', df.literal('x'))]), 'N-Quads');
+  assert.match(output, /^VERSION "1\.2-messages"\n/);
+  assert.match(output, /"x" \.\nMESSAGE\n$/);
 });
