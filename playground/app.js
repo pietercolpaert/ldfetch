@@ -7,6 +7,7 @@ var PrefixedWriter = require('../lib/PrefixedWriter.js');
 var prefixCc = require('../lib/prefix-cc.json');
 var rdfJsJelly = require('rdfjs-jelly');
 var visualizations = require('./visualizations');
+var sniffing = require('../lib/ContentSniffing.js');
 
 // Register common vocabularies up front so pretty RDF output can use compact
 // names. Prefixes declared by the fetched document are added to the list shown
@@ -991,6 +992,78 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  var STREAMABLE_FORMATS = ['text/turtle', 'application/trig', 'application/n-triples', 'application/n-quads', 'text/n3', 'application/x-jelly-rdf'];
+  // A well-labelled response only streams from here on when it is this big
+  var LARGE_BODY_BYTES = 50 * 1024 * 1024;
+
+  // A ReadableStream that first replays `prefix`, then continues with `reader`
+  function replayStream (prefix, reader) {
+    return new ReadableStream({
+      start: function (controller) { if (prefix.length) controller.enqueue(prefix); },
+      pull: function (controller) {
+        return reader.read().then(function (result) {
+          if (result.done) controller.close(); else controller.enqueue(result.value);
+        });
+      },
+      cancel: function (reason) { return reader.cancel(reason); }
+    });
+  }
+
+  // Reads from a stream until `isEnough(bytes)` holds or it ends, and returns
+  // the bytes read plus a stream that replays them and continues
+  function peekBody (body, isEnough) {
+    var reader = body.getReader();
+    var head = new Uint8Array(0);
+    function next () {
+      if (isEnough(head)) return Promise.resolve();
+      return reader.read().then(function (result) {
+        if (result.done) return;
+        var joined = new Uint8Array(head.length + result.value.length);
+        joined.set(head);
+        joined.set(result.value, head.length);
+        head = joined;
+        return next();
+      });
+    }
+    return next().then(function () { return { head: head, body: replayStream(head, reader) }; });
+  }
+
+  // The browser counterpart of RdfParsers.prepareStream() (lib/RdfParsers.js):
+  // a response without a URL extension that says what it is is recognized
+  // from its first bytes -- gzip magic, the file name in the gzip header, a
+  // Content-Disposition file name, the text itself -- so that a multi-GB
+  // .nt.gz behind a download link streams too. Resolves to { format, body,
+  // compression } with a body that is already decompressed, or to null when
+  // the response is not something to stream (it is then cancelled).
+  function probeStreamingBody (response, url) {
+    var declared = sniffing.baseContentType(response.headers.get('content-type'));
+    var length = parseInt(response.headers.get('content-length') || '0', 10);
+    var names = [sniffing.contentDispositionFileName(response.headers.get('content-disposition')), response.url, url].filter(Boolean);
+    return peekBody(response.body, function (head) {
+      return head.length >= 4 && (head[0] !== 0x1f || head[1] !== 0x8b || sniffing.gzipFileName(head) !== null || head.length >= 4096);
+    }).then(function (peeked) {
+      var body = peeked.body;
+      var compression = sniffing.detectCompression(peeked.head);
+      if (compression === 'zstd' || (compression === 'gzip' && typeof DecompressionStream === 'undefined')) return null;
+      if (compression === 'gzip') {
+        names.unshift(sniffing.gzipFileName(peeked.head) || '');
+        body = body.pipeThrough(new DecompressionStream('gzip'));
+        declared = '';
+      } else if (!sniffing.isUnhelpful(declared) && !(STREAMABLE_FORMATS.indexOf(declared) !== -1 && length >= LARGE_BODY_BYTES)) {
+        // Properly labelled, and not huge: nothing to gain over a normal fetch
+        return null;
+      }
+      var format = sniffing.isUnhelpful(declared) ? sniffing.typeFromNames(names) : declared;
+      var finish = function (type, stream) {
+        return STREAMABLE_FORMATS.indexOf(type) !== -1 ? { format: type, body: stream, compression: compression } : null;
+      };
+      if (format) return finish(format, body);
+      return peekBody(body, function (head) { return head.length >= 512; }).then(function (inner) {
+        return finish(sniffing.sniffContentType(inner.head), inner.body);
+      });
+    });
+  }
+
   // Entry point for examples too large to fetch normally: raw
   // fetch() (a plain GET, so no CORS-preflight-triggering headers), parsed
   // incrementally with n3.js-messages as chunks arrive,
@@ -1012,47 +1085,66 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch(proxy + url, requestOptions).then(function (response) {
       if (!response.ok) throw new Error('Request failed: HTTP ' + response.status);
       var contentType = response.headers.get('content-type') || '';
+      var versionMatch = contentType.match(/(?:^|;)\s*version\s*=\s*(?:"([^"]+)"|([^;\s]+))/i);
+      if (options.probe) {
+        // The URL says nothing about the format: decide from the response
+        return probeStreamingBody(response, url).then(function (probed) {
+          if (!probed) {
+            if (response.body) response.body.cancel().catch(function () {});
+            runBufferedFetch(url);
+            return null;
+          }
+          options.format = probed.format;
+          options.compression = probed.compression;
+          if (versionMatch) options.version = versionMatch[1] || versionMatch[2];
+          return startStreamingBody(url, options, probed.body);
+        });
+      }
       var declaredFormat = contentType.split(';')[0].trim().toLowerCase();
-      if (['text/turtle', 'application/trig', 'application/n-triples', 'application/n-quads', 'text/n3', 'application/x-jelly-rdf'].includes(declaredFormat)) {
+      if (STREAMABLE_FORMATS.includes(declaredFormat)) {
         options.format = declaredFormat;
       }
-      var versionMatch = contentType.match(/(?:^|;)\s*version\s*=\s*(?:"([^"]+)"|([^;\s]+))/i);
       if (versionMatch) options.version = versionMatch[1] || versionMatch[2];
       var body = response.body;
       if (options.compression === 'gzip') {
         if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot stream gzip-compressed files.');
         body = body.pipeThrough(new DecompressionStream('gzip'));
       }
-      var documentPrefixes = Object.create(null);
-      function addPrefix (prefix, iri) {
-          var value = (iri && iri.value !== undefined) ? iri.value : iri;
-          if (documentPrefixes[prefix] !== value) {
-            documentPrefixes[prefix] = value;
-            updateKnownPrefixes(documentPrefixes);
-          }
-      }
-      if (options.format === 'application/x-jelly-rdf') {
-        streamingKind = 'jelly';
-        streamingParser = new rdfJsJelly.StreamParser();
-        streamingParser.on('namespace', addPrefix);
-        streamingParser.on('message', function (message) {
-          if (currentMessages.length || pendingMessages.length) streamingMultipleMessages = true;
-          receiveMessage(message);
-        });
-        streamingReader = streamingParser.import(body).getReader();
-      } else {
-        streamingKind = 'text';
-        streamingReader = body.getReader();
-        streamingDecoder = new TextDecoder('utf-8');
-        streamingParser = createIncrementalParser({ baseIRI: url, format: options.format, version: options.version }, addPrefix);
-      }
-      codeJsEl.textContent = streamingJsSnippet(url, options);
-      codeCliEl.textContent = cliSnippet(url, null);
-      return continueStreaming();
+      return startStreamingBody(url, options, body);
     }).catch(function (error) {
       setStatus('Error: ' + (error && error.message ? error.message : error), true);
       fetchBtn.disabled = false;
     });
+  }
+
+  // Starts reading a (decompressed) response body incrementally
+  function startStreamingBody (url, options, body) {
+    var documentPrefixes = Object.create(null);
+    function addPrefix (prefix, iri) {
+      var value = (iri && iri.value !== undefined) ? iri.value : iri;
+      if (documentPrefixes[prefix] !== value) {
+        documentPrefixes[prefix] = value;
+        updateKnownPrefixes(documentPrefixes);
+      }
+    }
+    if (options.format === 'application/x-jelly-rdf') {
+      streamingKind = 'jelly';
+      streamingParser = new rdfJsJelly.StreamParser();
+      streamingParser.on('namespace', addPrefix);
+      streamingParser.on('message', function (message) {
+        if (currentMessages.length || pendingMessages.length) streamingMultipleMessages = true;
+        receiveMessage(message);
+      });
+      streamingReader = streamingParser.import(body).getReader();
+    } else {
+      streamingKind = 'text';
+      streamingReader = body.getReader();
+      streamingDecoder = new TextDecoder('utf-8');
+      streamingParser = createIncrementalParser({ baseIRI: url, format: options.format, version: options.version }, addPrefix);
+    }
+    codeJsEl.textContent = streamingJsSnippet(url, options);
+    codeCliEl.textContent = cliSnippet(url, null);
+    return continueStreaming();
   }
 
   messageSlider.addEventListener('input', function () {
@@ -1376,6 +1468,21 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    // Neither the extension nor a known format rules streaming out: a
+    // download link, or a gzipped file under a generic name, can still turn
+    // out to be a huge RDF Message log, which only the response itself tells.
+    // A format that is known not to stream goes straight to the normal fetch.
+    var guessed = sniffing.guessContentTypeFromUrl(sniffing.stripCompressionSuffix(url.split(/[?#]/)[0]));
+    if (!guessed && typeof ReadableStream !== 'undefined') {
+      updateHash();
+      startStreamingExample(url, { probe: true });
+      return;
+    }
+    runBufferedFetch(url);
+  }
+
+  // Fetches a document completely, then shows it
+  function runBufferedFetch(url) {
     updateHash();
     var formatName = outputFormat.value;
     var format = OUTPUT_FORMATS[formatName];

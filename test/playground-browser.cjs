@@ -30,6 +30,14 @@ const puppeteer = require('puppeteer-core');
   let riverbenchJellyWasProxied = false;
   let riverbenchFlatWasProxied = false;
   let riverbenchStreamingAccept;
+  // As `gzip log.nt` writes it: the file name is only in the gzip header
+  const namedMessages = (() => {
+    const bytes = Buffer.from(flatMessages);
+    const named = Buffer.concat([bytes.subarray(0, 10), Buffer.from('log.nt\0', 'latin1'), bytes.subarray(10)]);
+    named[3] |= 8;
+    return named;
+  })();
+  let downloadRequests = 0;
   let ordinaryGzipRequests = 0;
   const server = http.createServer((req, res) => {
     if (req.url === '/ontology.ttl') {
@@ -167,6 +175,12 @@ const puppeteer = require('puppeteer-core');
       riverbenchFlatWasProxied = true;
       res.setHeader('Content-Type', 'application/octet-stream');
       res.end(flatMessages);
+      return;
+    }
+    if (req.url === '/download') {
+      downloadRequests++;
+      res.setHeader('Content-Type', 'application/gzip');
+      res.end(namedMessages);
       return;
     }
     if (req.url === '/blank-nodes.ttl') {
@@ -430,6 +444,12 @@ const puppeteer = require('puppeteer-core');
     await page.goto(base + '#url=' + encodeURIComponent(riverbenchFlatUrl) + '&proxy=' + encodeURIComponent(base + 'proxy/'));
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused'));
     assert.equal(riverbenchFlatWasProxied, true);
+    assert.ok(await page.$eval('#status', el => Number((el.textContent.match(/(\d+) messages fetched so far/) || [])[1]) >= 1000));
+    assert.equal(await page.$eval('#message-slider', el => el.max), '999');
+    // No extension, labelled application/gzip: only the response says it is a message log
+    await page.goto(base + '#url=' + encodeURIComponent(base + 'download'));
+    await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused'));
+    assert.equal(downloadRequests, 1, 'A download link streams from the request that identified it');
     assert.ok(await page.$eval('#status', el => Number((el.textContent.match(/(\d+) messages fetched so far/) || [])[1]) >= 1000));
     assert.equal(await page.$eval('#message-slider', el => el.max), '999');
     await page.goto(base + '#url=' + encodeURIComponent(base + 'ordinary.nt.gz'));
