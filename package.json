@@ -1,6 +1,6 @@
 {
   "name": "ldfetch",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "description": "Linked Data Fetch HTTP RDF library for Node.js and browsers",
   "type": "commonjs",
   "bin": {
@@ -61,7 +61,7 @@
     "puppeteer-core": "^25.16.0",
     "q": "^2.0.3",
     "rdfa-streaming-parser": "^3.0.2",
-    "rdfjs-jelly": "^0.1.6",
+    "rdfjs-jelly": "^0.2.0",
     "rdfxml-streaming-parser": "^3.3.0",
     "shacl-engine": "^1.1.3",
     "shaclc-parse": "^2.0.0",
