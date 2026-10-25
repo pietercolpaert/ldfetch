@@ -292,6 +292,56 @@ test('RdfParsers parses Jelly-RDF and reports it as message-framed', async () =>
   assert.equal(messages.length, 1);
 });
 
+// Packed messages can share frames; a large message can also span frames.
+for (const version of [2, 3]) {
+  for (const streaming of [false, true]) {
+    test(`RdfParsers preserves Jelly tag ${version} messages and quad counters (${streaming ? 'stream' : 'buffer'})`, async () => {
+      const { Writer, DataFactory, RdfStreamType, PhysicalStreamType } = require('rdfjs-jelly');
+      const { namedNode, literal, quad } = DataFactory;
+      const statements = Array.from({ length: 40 }, (_, i) => quad(
+        namedNode('https://example.org/s'), namedNode('https://example.org/p'),
+        literal(String(i)), namedNode('https://example.org/g')));
+      const bytes = await new Promise((resolve, reject) => {
+        const writer = new Writer({
+          version, streamType: RdfStreamType.MESSAGES,
+          physicalType: PhysicalStreamType.QUADS, messageSize: 16,
+          namespaces: { ex: 'https://example.org/' }
+        });
+        writer.addMessage(statements);
+        writer.addMessage([]);
+        writer.addMessage([statements[0]]);
+        writer.addMessage([]);
+        writer.end((error, output) => error ? reject(error) : resolve(output));
+      });
+      const options = { contentType: 'application/x-jelly-rdf', baseIRI: 'https://example.org/' };
+      const messages = [];
+      const counters = [];
+      const triples = [];
+      const prefixes = {};
+      await new Promise((resolve, reject) => {
+        const parser = streaming
+          ? RdfParsers.parseStream(require('node:stream').Readable.from(
+            Array.from({ length: Math.ceil(bytes.length / 7) }, (_, i) => bytes.subarray(i * 7, i * 7 + 7))), options)
+          : RdfParsers.parse({ ...options, bodyBuffer: bytes });
+        parser.on('message', message => messages.push(message))
+          .on('prefix', (prefix, iri) => { prefixes[prefix] = iri; })
+          .on('data', (quad, counter) => { triples.push(quad); counters.push(counter); })
+          .on('error', reject).on('end', resolve);
+      });
+      assert.equal(prefixes.ex, 'https://example.org/');
+      assert.equal(triples.length, 41);
+      assert.ok(triples.every(q => q.graph.value === 'https://example.org/g'));
+      if (version === 3) {
+        assert.deepEqual(messages.map(m => m.length), [40, 0, 1, 0]);
+        assert.deepEqual(counters, [...Array(40).fill(0), 2]);
+      } else {
+        assert.ok(messages.length > 1);
+        assert.deepEqual(counters, messages.flatMap((message, i) => Array(message.length).fill(i)));
+      }
+    });
+  }
+}
+
 test('RdfParsers rejects unsupported content types', async () => {
   await assert.rejects(
     collect({ bodyText: 'whatever', contentType: 'application/x-not-a-real-format' }),

@@ -92,7 +92,8 @@ var WIKIDATA_SPARQL_CONSTRUCT_QUERY = [
 
 function riverBenchJellyArchive(dataset) {
   return {
-    url: 'https://w3id.org/riverbench/datasets/' + dataset + '/dev/files/jelly_full.jelly.gz',
+    // RiverBench uses the .2.jelly suffix for Jelly-RDF 1.2 distributions.
+    url: 'https://w3id.org/riverbench/datasets/' + dataset + '/dev/files/jelly_full.2.jelly.gz',
     proxy: true
   };
 }

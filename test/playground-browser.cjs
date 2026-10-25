@@ -8,16 +8,16 @@ const puppeteer = require('puppeteer-core');
 
 (async () => {
   const root = path.resolve(__dirname, '../_site');
-  const { Writer, DataFactory } = require('rdfjs-jelly');
+  const { Writer, DataFactory, RdfStreamType } = require('rdfjs-jelly');
   const { namedNode, literal, quad } = DataFactory;
   const jelly = await new Promise((resolve, reject) => {
-    const writer = new Writer({ namespaces: { ex: 'https://example.org/' } });
+    const writer = new Writer({ version: 3, streamType: RdfStreamType.MESSAGES, namespaces: { ex: 'https://example.org/' } });
     for (let i = 0; i < 1002; i++) writer.addMessage(Array.from({ length: 10 }, (_, j) =>
       quad(namedNode('https://example.org/s' + i), namedNode('https://example.org/p' + j), literal('Jelly value ' + i))));
     writer.end((error, bytes) => error ? reject(error) : resolve(require('node:zlib').gzipSync(bytes)));
   });
   const singleJelly = await new Promise((resolve, reject) => {
-    const writer = new Writer({ namespaces: { ex: 'https://example.org/' } });
+    const writer = new Writer({ version: 3, streamType: RdfStreamType.MESSAGES, namespaces: { ex: 'https://example.org/' } });
     writer.addMessage([quad(namedNode('https://example.org/single'), namedNode('https://schema.org/name'), literal('One Jelly message'))]);
     writer.end((error, bytes) => error ? reject(error) : resolve(bytes));
   });
@@ -164,7 +164,7 @@ const puppeteer = require('puppeteer-core');
       res.end(JSON.stringify({ '@context': { schema: 'https://schema.org/' } }));
       return;
     }
-    if (req.url === '/proxy/https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/jelly_full.jelly.gz') {
+    if (req.url === '/proxy/https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/jelly_full.2.jelly.gz') {
       riverbenchJellyWasProxied = true;
       riverbenchStreamingAccept = req.headers.accept;
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -420,7 +420,7 @@ const puppeteer = require('puppeteer-core');
     await riverBenchExamplePage.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     await riverBenchExamplePage.click('#more-examples > summary');
     await riverBenchExamplePage.click('[data-example="riverbench-jelly-assist-iot-weather"]');
-    await riverBenchExamplePage.waitForFunction(() => document.querySelector('#url').value.includes('/assist-iot-weather/dev/files/jelly_full.jelly.gz'));
+    await riverBenchExamplePage.waitForFunction(() => document.querySelector('#url').value.includes('/assist-iot-weather/dev/files/jelly_full.2.jelly.gz'));
     assert.equal(await riverBenchExamplePage.$eval('#proxy-toggle', el => el.checked), true);
     assert.equal(await riverBenchExamplePage.$eval('#proxy-url', el => el.value), 'https://proxy.linkeddatafragments.org/');
     assert.equal(await riverBenchExamplePage.$eval('#proxy-url-field', el => el.hidden), false);
@@ -433,7 +433,7 @@ const puppeteer = require('puppeteer-core');
     }, base + 'proxied.jsonld');
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Done'));
     assert.equal(contextWasProxied, true);
-    const riverbenchJellyUrl = 'https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/jelly_full.jelly.gz';
+    const riverbenchJellyUrl = 'https://w3id.org/riverbench/datasets/assist-iot-weather/dev/files/jelly_full.2.jelly.gz';
     await page.goto(base + '#url=' + encodeURIComponent(riverbenchJellyUrl) + '&proxy=' + encodeURIComponent(base + 'proxy/'));
     await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Paused'));
     assert.equal(riverbenchJellyWasProxied, true);
