@@ -24,7 +24,7 @@ Try it live in the [playground](https://www.pieter.pm/ldfetch/), which fetches a
 
 Features for the NodeJS framework in specific:
  * Automatically follows redirects
- * Able to be configured with HTTP caching
+ * Follows HTTP caching semantics (`Cache-Control`, `Expires`, `Vary`, `ETag`/`Last-Modified` revalidation) with a configurable cache, also for remote JSON-LD `@context`s -- see [HTTP caching](#http-caching)
  * Able to limit the amount of concurrent requests and schedule these
 
 Features for the Command Line:
@@ -109,6 +109,29 @@ The response object will look like this:
 }
 ```
 `prefixes` merges what you registered with `addPrefix` and whatever the source document declares itself. `messages` is only populated for RDF Message-framed sources (see Features above) -- each entry is the array of quads belonging to one message.
+
+#### HTTP caching
+
+Responses are cached in memory following [HTTP caching semantics](https://www.rfc-editor.org/rfc/rfc9111): a fresh response is served without a request, a stale one is revalidated with `If-None-Match`/`If-Modified-Since`, `Vary` is respected and `Cache-Control: no-store` is never stored. Remote JSON-LD `@context`s (e.g. `https://schema.org`) are fetched through the same machinery, so they are not downloaded again for every document. Custom `headers` (such as an `Authorization` header) are never sent along to a context's server.
+
+```javascript
+let fetch = new ldfetch({
+  // for documents: false to disable, or {store, minTTL, maxTTL, overrideNoStore, maxEntries}
+  cache: { minTTL: 0 },
+  // for remote JSON-LD contexts (defaults to the same cache as the documents)
+  contextCache: { minTTL: 60 }
+});
+```
+
+ * `minTTL` (in seconds, default `0`): a stored response is used without asking the server for at least this long, even if its own headers say it is already stale (`max-age=0`, `no-cache`, no freshness information at all). Handy for JSON-LD contexts, which hardly ever change but often are served with no useful caching headers. `no-store` is still honoured.
+ * `maxTTL` (in seconds, default unlimited): a stored response is revalidated after this long, even if its headers promise a longer freshness. The effective lifetime is `clamp(serverLifetime, minTTL, maxTTL)`.
+ * `overrideNoStore` (default `false`): explicit opt-in to also keep `no-store` responses for `minTTL` seconds.
+ * `store`: where entries are kept: anything with `get(key)`, `set(key, value)` and `delete(key)` (sync or async), such as a `Map`, a [Keyv](https://keyv.org) instance or your own disk-backed store. Defaults to an in-memory LRU holding `maxEntries` (default 500) entries. Entries are plain objects (`{policy, response, requestHeaders, storedAt}`) so a store can serialize them to JSON.
+ * You can also pass an `HttpCache` instance (`require('ldfetch/lib/HttpCache.js')`) to share one cache between several `ldfetch` instances, or between documents and contexts.
+
+Typical setup for processing many documents that share a remote context: `new ldfetch({ cache: false, contextCache: { minTTL: 600 } })`. For full control over how contexts are loaded, pass your own `documentLoader` (an object with an async `load(url)`).
+
+`getCacheStats()` returns `{hits, misses, revalidations, stores, keys}` for the document cache. The `cache-hit` and `cache-miss` events fire per request (a revalidation counts as a miss, as it needs the network). Not available in the browser bundle, where the browser's own HTTP cache applies.
 
 #### Streaming large sources with `getStream`
 
