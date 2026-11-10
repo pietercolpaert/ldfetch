@@ -131,6 +131,24 @@ let fetch = new ldfetch({
 
 Typical setup for processing many documents that share a remote context: `new ldfetch({ cache: false, contextCache: { minTTL: 600 } })`. For full control over how contexts are loaded, pass your own `documentLoader` (an object with an async `load(url)`).
 
+##### Cached JSON-LD context loader on top of any `fetch`
+
+The context cache is also available on its own, for when you bring your own `fetch` (with retries, authentication, per-domain concurrency, test stubs...) or your own JSON-LD parser. `cachedDocumentLoader` returns a `documentLoader` for [jsonld-streaming-parser](https://github.com/rubensworks/jsonld-streaming-parser.js) and friends, and also works in the browser:
+
+```javascript
+const { cachedDocumentLoader } = require('ldfetch/lib/ContextLoader.js');
+const HttpCache = require('ldfetch/lib/HttpCache.js');
+
+const documentLoader = cachedDocumentLoader({
+  fetch: myFetch,                          // fetch(url, {headers}) => Response; defaults to globalThis.fetch
+  cache: new HttpCache({ minTTL: 600 }),   // or a falsy value to not cache
+  getStatus: response => response.status   // optional, for a fetch that hides the real status (e.g. a 304 behind a 200)
+});
+const parser = new JsonLdParser({ documentLoader });
+```
+
+It revalidates stale entries with a conditional request, shares concurrent requests for the same URL, returns the very same parsed object for as long as the cache entry lives, resolves `rel="alternate"` contexts, and never caches a 404, a 410 or an unparsable context. Only the context's own `Accept` header is sent to its server. `new ldfetch()` uses this loader itself in Node, so the options above apply to it as well.
+
 `getCacheStats()` returns `{hits, misses, revalidations, stores, keys}` for the document cache. The `cache-hit` and `cache-miss` events fire per request (a revalidation counts as a miss, as it needs the network). Not available in the browser bundle, where the browser's own HTTP cache applies.
 
 #### Streaming large sources with `getStream`
