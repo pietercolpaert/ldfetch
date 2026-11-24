@@ -342,6 +342,61 @@ for (const version of [2, 3]) {
   }
 }
 
+// A Jelly stream that is cut at a frame boundary continues with the decoder state
+// of the part before it (options.jellyState), e.g. for bytes appended to a growing
+// file and fetched with an HTTP Range request.
+const jellyHasState = typeof require('rdfjs-jelly').Parser.prototype.getState === 'function';
+for (const version of [2, 3]) {
+  for (const streaming of [false, true]) {
+    test(`RdfParsers continues a Jelly tag ${version} stream from its decoder state (${streaming ? 'stream' : 'buffer'})`, { skip: !jellyHasState && 'rdfjs-jelly has no getState()' }, async () => {
+      const { Writer, DataFactory, RdfStreamType } = require('rdfjs-jelly');
+      const { namedNode, literal, quad } = DataFactory;
+      const message = i => [
+        quad(namedNode('https://example.org/m' + i), namedNode('https://example.org/value'), literal(String(i))),
+        quad(namedNode('https://example.org/m' + i), namedNode('https://example.org/other'), literal('x'))
+      ];
+      // A streaming writer, flushed after each part, so that each part ends at a frame boundary
+      const parts = [];
+      let written = [];
+      const writer = new Writer({
+        write: (bytes, done) => { written.push(Buffer.from(bytes)); if (done) done(); },
+        end: done => { if (done) done(); }
+      }, { version, streamType: RdfStreamType.MESSAGES });
+      for (const part of [[0, 1, 2], [3, 4]]) {
+        for (const i of part) writer.addMessage(message(i));
+        writer.flush();
+        parts.push(Buffer.concat(written));
+        written = [];
+      }
+
+      const options = { contentType: 'application/x-jelly-rdf', baseIRI: 'https://example.org/' };
+      const run = (bytes, extra = {}) => new Promise((resolve, reject) => {
+        const messages = [];
+        let state;
+        const parser = streaming
+          ? RdfParsers.parseStream(require('node:stream').Readable.from([bytes]), { ...options, ...extra })
+          : RdfParsers.parse({ ...options, ...extra, bodyBuffer: bytes });
+        parser.on('message', m => messages.push(m.map(q => q.subject.value.replace('https://example.org/', '') + ' ' + q.object.value)))
+          .on('jellyState', s => { state = s; })
+          .on('error', reject).on('end', () => resolve({ messages, state }));
+      });
+
+      const first = await run(parts[0]);
+      assert.deepEqual(first.messages, [['m0 0', 'm0 x'], ['m1 1', 'm1 x'], ['m2 2', 'm2 x']]);
+      assert.ok(first.state, 'a jellyState event before end');
+      // The state is plain data, which a client stores between runs
+      const stored = JSON.parse(JSON.stringify(first.state));
+
+      const second = await run(parts[1], { jellyState: stored });
+      assert.deepEqual(second.messages, [['m3 3', 'm3 x'], ['m4 4', 'm4 x']]);
+      assert.ok(second.state, 'the continued stream has a state too');
+
+      // Without the state, the second part cannot be read on its own
+      await assert.rejects(run(parts[1]));
+    });
+  }
+}
+
 test('RdfParsers rejects unsupported content types', async () => {
   await assert.rejects(
     collect({ bodyText: 'whatever', contentType: 'application/x-not-a-real-format' }),
