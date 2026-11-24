@@ -342,9 +342,82 @@ for (const version of [2, 3]) {
   }
 }
 
-// A Jelly stream that is cut at a frame boundary continues with the decoder state
-// of the part before it (options.jellyState), e.g. for bytes appended to a growing
-// file and fetched with an HTTP Range request.
+// An RDF Message log that is cut at a message boundary continues with the
+// parser state of the part before it (options.parserState), e.g. for bytes
+// appended to a growing file and fetched with an HTTP Range request.
+
+// Parses bytes or text, and gives the messages (as "subject object" strings),
+// the quad counters, the prefixes and the parser state
+function parseLog (input, options, streaming) {
+  return new Promise((resolve, reject) => {
+    const messages = [];
+    const counters = [];
+    const prefixes = {};
+    let state;
+    const bytes = Buffer.from(input);
+    const parser = streaming
+      ? RdfParsers.parseStream(require('node:stream').Readable.from([bytes.subarray(0, 7), bytes.subarray(7)]), options)
+      : RdfParsers.parse({ ...options, bodyText: bytes.toString('utf8'), bodyBuffer: bytes });
+    parser.on('message', m => messages.push(m.map(q => q.subject.value.replace(/^.*\//, '') + ' ' + q.object.value)))
+      .on('data', (quad, counter) => counters.push(counter))
+      .on('prefix', (prefix, iri) => { prefixes[prefix] = iri; })
+      .on('parserState', s => { state = s; })
+      .on('error', reject).on('end', () => resolve({ messages, counters, prefixes, state }));
+  });
+}
+
+const turtleLogs = {
+  'application/trig': [
+    'VERSION "1.2-messages"\nPREFIX ex: <https://example.org/>\nex:m0 ex:value "0" .\nMESSAGE\nex:m1 ex:value "1" .\n',
+    // Appended: uses the prefix of the first part, and starts with a delimiter
+    'MESSAGE\nex:m2 ex:value "2" .\nMESSAGE\nex:m3 ex:value "3" .\n'
+  ],
+  'application/n-quads': [
+    'VERSION "1.2-messages"\n<https://example.org/m0> <https://example.org/value> "0" .\nMESSAGE\n<https://example.org/m1> <https://example.org/value> "1" <https://example.org/g> .\n',
+    'MESSAGE\n<https://example.org/m2> <https://example.org/value> "2" .\nMESSAGE\n<https://example.org/m3> <https://example.org/value> "3" .\n'
+  ]
+};
+const n3HasState = typeof new (require('n3.js-messages').MessageParser)().getState === 'function';
+const n3Skip = !n3HasState && 'n3.js-messages has no getState()';
+for (const [contentType, [first, appended]] of Object.entries(turtleLogs)) {
+  for (const streaming of [false, true]) {
+    test(`RdfParsers continues a ${contentType} message log from its parser state (${streaming ? 'stream' : 'buffer'})`, { skip: n3Skip }, async () => {
+      const options = { contentType, baseIRI: 'https://example.org/log' };
+      const before = await parseLog(first, options, streaming);
+      assert.deepEqual(before.messages, [['m0 0'], ['m1 1']]);
+      assert.deepEqual(before.counters, [0, 1]);
+      assert.equal(before.state.syntax, contentType);
+      assert.equal(before.state.n3.messages, 2);
+
+      // The state is plain data, which a client stores between runs
+      const state = JSON.parse(JSON.stringify(before.state));
+      const after = await parseLog(appended, { ...options, parserState: state }, streaming);
+      // The empty message before the first delimiter is not a message of the log; counters go on
+      assert.deepEqual(after.messages, [['m2 2'], ['m3 3']]);
+      assert.deepEqual(after.counters, [2, 3]);
+      assert.equal(after.state.n3.messages, 4);
+      // The prefix of the first part was used (m2, m3 are ex: names), and stays in the state
+      if (contentType === 'application/trig') assert.equal(after.state.n3.prefixes.ex, 'https://example.org/');
+
+      // Without the state, the appended part cannot be read on its own
+      await assert.rejects(parseLog(appended, options, streaming));
+    });
+  }
+}
+
+test('RdfParsers gives no parser state for a document without messages', async () => {
+  const { state } = await parseLog('<https://example.org/s> <https://example.org/p> "o" .\n', { contentType: 'text/turtle', baseIRI: 'https://example.org/' }, false);
+  assert.equal(state, undefined);
+});
+
+test('RdfParsers rejects a parser state of another syntax', { skip: n3Skip }, async () => {
+  const before = await parseLog(turtleLogs['application/trig'][0], { contentType: 'application/trig', baseIRI: 'https://example.org/' }, false);
+  await assert.rejects(
+    parseLog(turtleLogs['application/n-quads'][1], { contentType: 'application/n-quads', baseIRI: 'https://example.org/', parserState: before.state }, false),
+    /cannot continue application\/n-quads/
+  );
+});
+
 const jellyHasState = typeof require('rdfjs-jelly').Parser.prototype.getState === 'function';
 for (const version of [2, 3]) {
   for (const streaming of [false, true]) {
@@ -377,17 +450,17 @@ for (const version of [2, 3]) {
           ? RdfParsers.parseStream(require('node:stream').Readable.from([bytes]), { ...options, ...extra })
           : RdfParsers.parse({ ...options, ...extra, bodyBuffer: bytes });
         parser.on('message', m => messages.push(m.map(q => q.subject.value.replace('https://example.org/', '') + ' ' + q.object.value)))
-          .on('jellyState', s => { state = s; })
+          .on('parserState', s => { state = s; })
           .on('error', reject).on('end', () => resolve({ messages, state }));
       });
 
       const first = await run(parts[0]);
       assert.deepEqual(first.messages, [['m0 0', 'm0 x'], ['m1 1', 'm1 x'], ['m2 2', 'm2 x']]);
-      assert.ok(first.state, 'a jellyState event before end');
+      assert.equal(first.state.syntax, 'application/x-jelly-rdf', 'a parserState event before end');
       // The state is plain data, which a client stores between runs
       const stored = JSON.parse(JSON.stringify(first.state));
 
-      const second = await run(parts[1], { jellyState: stored });
+      const second = await run(parts[1], { parserState: stored });
       assert.deepEqual(second.messages, [['m3 3', 'm3 x'], ['m4 4', 'm4 x']]);
       assert.ok(second.state, 'the continued stream has a state too');
 
